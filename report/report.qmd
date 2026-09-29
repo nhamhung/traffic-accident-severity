@@ -1,0 +1,458 @@
+---
+title: "Predicting Traffic Accident Severity"
+subtitle: "A worked case study on Addis Ababa's real accident records, motivated by Vietnam's own traffic-safety problem"
+author: "Your Name"
+date: today
+format:
+  html:
+    theme:
+      light: flatly
+      dark: darkly
+    css: styles.css
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    number-sections: true
+    code-fold: true
+    code-tools: true
+    code-copy: true
+    title-block-banner: true
+    fig-width: 7.5
+    fig-height: 4.5
+    embed-resources: true
+    smooth-scroll: true
+  pdf:
+    toc: true
+    number-sections: true
+execute:
+  echo: true
+  warning: false
+  message: false
+jupyter: traffic-accident-severity
+---
+
+```{python}
+#| echo: false
+#| output: false
+import sys
+sys.path.insert(0, "../src")
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+PALETTE = ["#2c5cc5", "#5b8def", "#8fb4f2", "#e07a5f", "#81b29a"]
+sns.set_theme(style="whitegrid", font="sans-serif")
+plt.rcParams.update({
+    "figure.dpi": 130,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.titleweight": "600",
+    "axes.titlesize": 13,
+    "axes.labelsize": 11,
+})
+```
+
+## Introduction
+
+I started this project because traffic accidents and congestion are
+such a visible, everyday problem in Vietnam's cities, and I wanted to
+try applying what I've learned about classification and imbalanced
+data to a real road-safety question. The obvious first step — finding
+a Vietnamese accident dataset — turned out to be a dead end: I checked,
+and Hanoi's accident records are paper-based police forms, not open
+data anywhere I could find.
+
+So instead I picked a real, well-documented dataset chosen for its
+**contextual** similarity rather than its origin: accident records from
+Addis Ababa sub-city police (2017-2020). It's a developing-country,
+mixed-vehicle urban traffic environment — motorcycles, pedestrians,
+buses, and private cars sharing the same roads, with less-regulated
+driving conditions — which felt a lot closer to Vietnam's own traffic
+reality than the larger, better-known Western datasets I also
+considered (US-Accidents, UK STATS19), which are purely car-centric
+highway/suburban data. I want to be clear about what this claim is and
+isn't: I'm not saying Ethiopian and Vietnamese traffic are the same,
+only that the *kind* of problem — mixed-vehicle, developing urban road
+network — is far more comparable than a US freeway dataset would be.
+
+My task: predict accident **severity** from conditions known *before*
+or *at* the moment of a crash — never from what happened to the people
+involved afterward. The raw data records severity as 3 classes (Slight
+/ Serious / Fatal injury), but as I'll show below, I ended up
+deliberately collapsing that to a binary **Severe vs. Not Severe**
+target instead, after measuring — not assuming — that the 3-class
+version couldn't reliably detect the outcome that matters most.
+
+## Data
+
+12,316 real accident records, 32 raw columns.
+
+```{python}
+from traffic_accident_severity import config, data
+
+df = data.load_accidents()
+print(f"{len(df)} rows, {df.shape[1]} columns")
+df[config.TARGET_COL].value_counts(normalize=True)
+```
+
+### The central data-understanding decision: excluding casualty outcomes
+
+Looking through the raw columns, I noticed they split into two
+fundamentally different kinds:
+
+- **Pre-accident risk factors** (driver, vehicle, road, weather, time,
+  collision dynamics) — knowable before/at the crash, the only kind of
+  feature a real prevention or policy system could act on.
+- **Post-accident casualty-outcome columns** (`Casualty_class`,
+  `Casualty_severity`, `Sex_of_casualty`, `Age_band_of_casualty`,
+  `Work_of_casuality`, `Fitness_of_casuality`, `Number_of_casualties`) —
+  recorded *after* the crash, describing who got hurt and how.
+
+This second group is a data-leakage trap I nearly walked into: using
+these as features would be circular, since a system that needs to
+already know how badly someone was hurt to predict how badly someone
+was hurt isn't useful for anything. I excluded all of them up front.
+
+```{python}
+X, y = data.split_features_target(df)
+print("Feature columns:", len(config.RAW_FEATURE_COLS))
+print("Excluded casualty-outcome columns:", config.CASUALTY_OUTCOME_COLS)
+```
+
+### Real data-quality issues, found by checking rather than assuming
+
+- **Severe missingness**: `Defect_of_vehicle` (~36%), `Service_year_of_vehicle`
+  (~32%), `Work_of_casuality` (~26%), `Fitness_of_casuality` (~21%) —
+  I used most-frequent imputation rather than dropping rows, which would
+  have thrown away a large share of an already-small dataset.
+- **Inconsistent time formatting**: I found that `Time` isn't always
+  zero-padded — some rows are `"1:15:00"`, not `"01:15:00"`. My first
+  attempt at parsing this with a naive string-slice silently corrupted
+  single-digit hours; I only caught it while building this project's
+  Streamlit app and noticing the hour distribution looked wrong.
+  `pd.to_datetime(..., format="%H:%M:%S")` parses both forms correctly.
+
+## Feature engineering
+
+```{python}
+from traffic_accident_severity.features import FeatureEngineer
+
+engineered = FeatureEngineer().fit_transform(X)
+engineered[["hour", "hour_sin", "hour_cos"]].describe().T
+```
+
+- **Circular hour-of-day encoding** (`hour_sin`/`hour_cos`) — hour 23
+  and hour 0 are one hour apart, not "far away" from each other, so I
+  placed hour on a 24-hour circle instead of leaving it as a plain
+  integer — a standard technique for any periodic feature.
+- **`RareCategoryGrouper`** on `Cause_of_accident` (20 distinct values),
+  `Type_of_vehicle` (17), and `Area_accident_occured` (14) — a standard
+  technique for long-tailed categorical variables generally.
+
+## Choosing the modeling target: binary Severe, not raw 3-class
+
+The raw target has 3 classes, and Fatal injury — the one that matters
+most — is only ~1.3% of rows (~158 total). Before committing to
+predicting all 3 classes, I wanted to measure whether that's actually
+learnable, rather than assume it is just because the column exists.
+
+```{python}
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from traffic_accident_severity import model, config
+
+X_raw = df[config.RAW_FEATURE_COLS]
+y_raw = df[config.TARGET_COL]  # still the raw 3-class column here
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X_raw, y_raw, test_size=0.2, stratify=y_raw, random_state=config.RANDOM_SEED
+)
+raw_pipeline = model.build_pipeline(model.balanced_random_forest_estimator())
+raw_pipeline.fit(X_train, y_train)
+print(classification_report(y_test, raw_pipeline.predict(X_test), digits=3))
+```
+
+Even with class-weighting, Fatal injury's recall is around 3% — the
+model is essentially not detecting it. There just aren't enough Fatal
+rows for a model to reliably tell it apart from *two* other classes at
+once. Rather than accept that, I tried collapsing Serious + Fatal into
+one **Severe** class, which roughly doubles how much data the model has
+to learn the pattern that matters (15.4% of rows vs. 1.3%):
+
+```{python}
+X, y = data.split_features_target(df)  # y is now binary: "Severe" vs "Not Severe"
+print(y.value_counts(normalize=True))
+
+X_train_b, X_test_b, y_train_b, y_test_b = train_test_split(
+    X, y, test_size=0.2, stratify=y, random_state=config.RANDOM_SEED
+)
+severe_pipeline = model.build_pipeline(model.balanced_random_forest_estimator())
+severe_pipeline.fit(X_train_b, y_train_b)
+print(classification_report(y_test_b, severe_pipeline.predict(X_test_b), digits=3))
+```
+
+Recall for the outcome that matters most goes from ~3% to roughly
+30-35% — a real, substantial improvement, not a marginal one. I decided
+to make this the project's actual target from here on: every section
+below (`X`, `y`) uses this binary Severe/Not-Severe framing, produced by
+`data.split_features_target`, not the raw 3-class column. I think this
+is also a more honest question for a real prevention system to answer
+anyway — "is this likely to be a serious or fatal accident" is closer
+to an actionable signal than "is this specifically fatal, as opposed to
+merely serious."
+
+## Methodology
+
+### Why macro-F1, made concrete
+
+```{python}
+baseline = model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5)
+print(f"Accuracy: {baseline['accuracy_mean']:.4f}")
+print(f"Macro-F1: {baseline['f1_macro_mean']:.4f}")
+```
+
+The first time I ran this, the ~84.6% accuracy looked encouraging —
+until I noticed it's almost exactly the majority-class ("Not Severe")
+share. A model that mostly just predicts "Not Severe" for everything
+would score similarly, which told me accuracy wasn't measuring what I
+actually cared about. Macro-F1 told a very different story, exposing
+how poorly that same model handles the Severe class. I used macro-F1
+for every comparison from this point on.
+
+### Class-imbalance handling, compared honestly
+
+Severe is only ~15.4% of rows (~1,901 total) — still imbalanced enough
+that it shapes every modeling decision from here on. I compared two
+different fixes rather than assuming either one would help:
+
+```{python}
+imbalance_results = pd.DataFrame([
+    {"approach": "Plain Random Forest", **model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5)},
+    {"approach": "Random Forest + ADASYN", **model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5, resample=True)},
+    {"approach": "Random Forest (class_weight=balanced)", **model.cross_validate_pipeline(X, y, estimator=model.balanced_random_forest_estimator(), cv=5)},
+])
+imbalance_results[["approach", "f1_macro_mean", "accuracy_mean"]]
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(6, 3.2))
+ax.barh(imbalance_results["approach"], imbalance_results["f1_macro_mean"], color=[PALETTE[3], PALETTE[2], PALETTE[0]])
+ax.set_xlabel("Macro-F1")
+plt.show()
+```
+
+**Class-weighting won clearly.** I don't think that's a rule to assume
+for every imbalanced dataset — the better fix genuinely depends on the
+data — which is exactly why I measured it directly instead of picking
+one on instinct. With Severe at ~15.4% of rows, ADASYN's default
+`n_neighbors=5` runs fine here — this needed lowering to 3 back when
+the target was still the raw 3-class column and Fatal injury alone was
+only ~1.3% of rows.
+
+### Model comparison
+
+```{python}
+sweep_results = []
+for name, factory in model.MODEL_FACTORIES.items():
+    scores = model.cross_validate_pipeline(X, y, estimator=factory(), cv=5)
+    sweep_results.append({"model": name, **scores})
+sweep_df = pd.DataFrame(sweep_results).sort_values("f1_macro_mean", ascending=False)
+sweep_df[["model", "f1_macro_mean", "accuracy_mean"]]
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(6, 3.5))
+ax.barh(sweep_df["model"], sweep_df["f1_macro_mean"], color=PALETTE[0])
+ax.set_xlabel("Macro-F1")
+plt.gca().invert_yaxis()
+plt.show()
+```
+
+`Random Forest (balanced)` beats even LightGBM and XGBoost here, which
+surprised me a little going in — correctly handling the imbalance
+mattered more than model sophistication.
+
+## Choosing a decision threshold
+
+`Random Forest (balanced)` outputs a *probability* of Severe, and
+`.predict()` just applies a 0.5 cutoff to it internally. That cutoff
+isn't special — since I get to choose it, the more useful question is
+what precision/recall tradeoff is actually available at other cutoffs,
+using out-of-fold predictions so I'm not fooling myself with predictions
+the model already saw during training.
+
+```{python}
+from sklearn.metrics import average_precision_score
+
+severe_proba = model.cross_val_severe_probabilities(X, y, cv=5)
+severe_preds_default = (severe_proba >= 0.5).astype(int)
+y_numeric = (y == "Severe").astype(int)
+print(classification_report(y_numeric, severe_preds_default, target_names=["Not Severe", "Severe"], digits=3))
+```
+
+At the default threshold, precision and recall for Severe are both
+around 30% — not high in absolute terms, but a genuinely useful signal
+compared to the ~3% Fatal recall the raw 3-class target gave. Since the
+threshold is a free choice, the next step sweeps it directly.
+
+```{python}
+pr_auc = average_precision_score(y_numeric, severe_proba)
+print(f"Average precision (PR-AUC): {pr_auc:.4f}  (base rate: {y_numeric.mean():.4f})")
+
+threshold_sweep = model.severity_threshold_sweep(y, severe_proba, target_recalls=[0.3, 0.5, 0.7, 0.9])
+threshold_sweep
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(6, 3.5))
+ax.plot(threshold_sweep["recall"], threshold_sweep["precision"], marker="o", color=PALETTE[0])
+for _, row in threshold_sweep.iterrows():
+    ax.annotate(f"thr={row['threshold']:.2f}", (row["recall"], row["precision"]), textcoords="offset points", xytext=(6, 4))
+ax.axhline(y_numeric.mean(), linestyle="--", color="gray", label="base rate")
+ax.set_xlabel("Recall (share of Severe accidents caught)")
+ax.set_ylabel("Precision (share of Severe alerts that are real)")
+ax.legend()
+plt.show()
+```
+
+The PR-AUC (~0.29) is roughly 2x the base rate (~0.154) — a real
+improvement over guessing. The curve makes the tradeoff at the extremes
+visible: to catch 90% of Severe accidents, precision drops to ~18% —
+about 1 in 6 "Severe" alerts would be real. At the more conservative
+30% recall end, precision is closer to 31%. Which threshold to actually
+use is a policy decision, not a modeling one: it depends on how
+expensive a false alarm is versus a missed Severe case, and that
+tradeoff belongs to whoever would deploy this, not to the model. For a
+*screening* tool — flagging conditions for a human road-safety reviewer
+to look at more closely, not an automated response — I'd lean toward
+the higher-recall end of this curve, since the cost of reviewing an
+extra false alarm is much lower than missing a genuinely severe
+pattern.
+
+## Model interpretability
+
+```{python}
+from traffic_accident_severity.interpretability import compute_shap_values, top_shap_features
+
+final_pipeline = model.train_pipeline(X, y, estimator=model.balanced_random_forest_estimator())
+explanation, _ = compute_shap_values(final_pipeline, X, max_samples=500)
+top = top_shap_features(explanation, top_n=12, class_index=1).sort_values("mean_abs_shap")
+
+fig, ax = plt.subplots(figsize=(6, 5))
+ax.barh(top["feature"], top["mean_abs_shap"], color=PALETTE[0])
+ax.set_xlabel("Mean |SHAP value| for the Severe class")
+ax.set_title("Top 12 features driving Severe predictions")
+plt.show()
+```
+
+### What these features would mean for Vietnam
+
+The features SHAP ranks highest for Severe are almost all things a city
+traffic authority can actually act on, which is what makes this more
+than an academic exercise:
+
+- **Number of vehicles involved** and **junction type** dominate —
+  multi-vehicle collisions and crossing-type junctions carry
+  disproportionate Severe risk. That points at *where* to intervene,
+  not just *who* to blame.
+- **Time of day** and **weather** show up clearly too, plausibly
+  reflecting visibility and traffic-flow conditions rather than any
+  single driver behavior.
+- An unrecorded/unknown age band (plausibly a proxy for unlicensed or
+  informally-recorded drivers) and day of week both rank in the top 12
+  — worth investigating further, though I'd want more than a SHAP
+  ranking alone before treating either as causal.
+
+Mapping this back to Vietnam, the same categories of lever seem like
+they'd matter there too: **junction design and signage at crossing-type
+intersections**, **stricter enforcement around multi-vehicle collision
+hotspots**, and **weather/visibility-aware traffic management**. I want
+to be careful not to overclaim here — this is a correlational SHAP
+ranking on Ethiopian data, not a Vietnamese study, and it can't prove
+causation. What it does show is what a similar analysis on real
+Vietnamese accident records — if that data ever became available —
+would likely need to prioritize first.
+
+## Discussion: what would a congestion-forecasting system need?
+
+This project predicts accident **severity** — a genuinely different
+problem from predicting traffic **congestion**, even though both fall
+under "traffic management." I think it's worth being precise about the
+difference, since it shapes what would actually help Vietnam next, and
+because it would be easy to walk away from this project overclaiming
+what a severity classifier can do.
+
+**Different data entirely.** Severity classification needs individual
+accident *records* — one row per crash. Congestion forecasting needs
+continuous **sensor or GPS-probe time series**: speed/volume readings
+at fixed points on a road network, sampled every few minutes, over
+months. The standard public benchmarks — **METR-LA** (207 LA freeway
+sensors) and **PEMS-BAY** (325 Bay Area sensors) — look nothing like
+this project's data: no individual events, just continuous per-sensor
+speed readings.
+
+**Different modeling approach: spatio-temporal, not tabular.** This
+project's classifiers treat every accident record as independent.
+Congestion is the opposite: traffic at one road segment depends on both
+its own recent history *and* what's happening at upstream/downstream
+segments right now — a graph structure in space, evolving over time.
+Standard approaches (**DCRNN**, **Graph WaveNet**) explicitly model the
+road network as a graph, combining graph convolutions with recurrent/
+temporal layers — not something a `RandomForestClassifier` or
+`LGBMClassifier` (this project's tools) can express.
+
+**What Vietnam specifically would need that this project's data can't
+provide:**
+
+- **A sensor network, or a substitute for one.** METR-LA/PEMS-BAY rely
+  on fixed highway loop detectors — infrastructure Vietnam's urban roads
+  mostly lack. The realistic substitute is crowd-sourced **GPS probe
+  data** (ride-hailing/mapping apps) aggregated into road-segment speed
+  estimates — a fundamentally different data-collection problem.
+- **A model of mixed-vehicle flow.** Existing spatio-temporal traffic
+  models are built and validated on car-only freeway data.
+  Motorbike-dominated urban traffic (lane-splitting, informal lane use,
+  far higher vehicle density per road width) behaves differently enough
+  that the same architectures would need real validation on
+  Vietnam-specific data before trusting them.
+- **Integration with accident-risk findings like this project's own.**
+  A genuinely useful combined system wouldn't just forecast where
+  traffic will be slow — it would flag where slow-moving, high-density,
+  mixed-vehicle conditions also historically correlate with severe
+  accidents (this project's junction-type and multi-vehicle-collision
+  findings above), turning two separate models into one early-warning
+  system for both congestion *and* safety.
+
+None of this is a limitation of this project — it's the honest scope
+boundary between two real, different traffic-management problems, and
+I'd rather name that boundary clearly than imply this one classifier
+solves both.
+
+## Conclusion
+
+Working through a severely imbalanced, moderately messy, real accident
+dataset — chosen for contextual relevance to a problem I couldn't get
+open Vietnamese data for directly — taught me a few things I'd want to
+carry into any future imbalanced-classification project: accuracy can
+be actively misleading, class-weighting isn't automatically the right
+fix (it just happened to win here, and only because I checked), and
+correctly handling imbalance mattered more than model choice.
+
+The biggest decision in this project turned out to be the target
+itself, not the model. Measuring — rather than assuming — that the raw
+3-class column left Fatal injury essentially undetected (~3% recall)
+was the key step; collapsing Serious + Fatal into one **Severe** class
+raised that to ~30-35% recall and macro-F1 from ~0.39 to ~0.60, a
+substantial, measured improvement, not a marginal one. I think that's
+the more general lesson: when a rare class isn't learnable, the fix
+isn't always a fancier model or more resampling — sometimes it's asking
+a different, still-useful question of the same data.
+
+The SHAP explainability work pointed at concrete, actionable levers —
+junction type, multi-vehicle collisions, time of day, and weather — that
+I think would transfer conceptually to Vietnam's own traffic-safety
+problem, even though this dataset can't prove that directly. Congestion
+forecasting, the natural next traffic-management question, needs
+different data and a different modeling paradigm entirely — a scope
+boundary worth stating plainly rather than blurring.
