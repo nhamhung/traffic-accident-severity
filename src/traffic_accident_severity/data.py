@@ -9,6 +9,7 @@ deploying without a Docker image that already bakes the file in; see
 
 from pathlib import Path
 from io import BytesIO
+import os
 import zipfile
 
 import numpy as np
@@ -52,9 +53,14 @@ def _require_file(path: Path) -> Path:
     return path
 
 
+def using_sample_data() -> bool:
+    """Whether the bundled Kaggle-derived sample is the active data source."""
+    return config.SAMPLE_CSV.exists() and os.getenv("USE_FULL_KAGGLE_DATA", "").lower() not in {"1", "true", "yes"}
+
+
 def load_accidents() -> pd.DataFrame:
     """Load records from CSV, including ZIP bytes saved under a CSV suffix."""
-    path = _require_file(config.RAW_CSV)
+    path = config.SAMPLE_CSV if using_sample_data() else _require_file(config.RAW_CSV)
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
             members = [name for name in archive.namelist() if name.lower().endswith(".csv")]
