@@ -84,6 +84,17 @@ deliberately collapsing that to a binary **Severe vs. Not Severe**
 target instead, after measuring — not assuming — that the 3-class
 version couldn't reliably detect the outcome that matters most.
 
+I also didn't want this to be a project that jumps straight into
+modeling and treats the data itself as a formality. A good chunk of
+this report is a genuinely deep look at the data first — which raw
+factors actually associate with severity, using a method built for
+categorical data instead of a plain correlation matrix that would have
+missed the most important pattern in the dataset — and, once a model
+exists, a deliberate effort to translate what it finds into concrete
+recommendations for two audiences who'd actually care about the answer:
+people who set road-safety policy, and people who just drive on these
+roads every day.
+
 ## Data
 
 12,316 real accident records, 32 raw columns.
@@ -132,6 +143,155 @@ print("Excluded casualty-outcome columns:", config.CASUALTY_OUTCOME_COLS)
   single-digit hours; I only caught it while building this project's
   Streamlit app and noticing the hour distribution looked wrong.
   `pd.to_datetime(..., format="%H:%M:%S")` parses both forms correctly.
+
+## Digging deeper: what actually correlates with severity?
+
+Before any modeling, I wanted to spend more time just looking at the
+data: which of these 23 feature columns actually move the needle on
+whether an accident turns out severe, and by how much? This is worth
+doing *before* modeling — it's the same information SHAP will later
+give me from a trained model, computed here directly from the data with
+no model in between, which makes it a good honesty check on whatever
+the model says later.
+
+### Why Cramér's V, not a plain correlation matrix
+
+My first instinct was `df.corr()` — but almost every column here is
+categorical, and even the numeric-looking ones (`hour`) aren't linear
+in their effect. Pearson correlation only measures *linear* association
+and can completely miss a real relationship that isn't a straight line.
+I used **Cramér's V** instead — an association measure for two
+categorical variables, based on the chi-squared test, ranging from 0
+(no association) to 1 (perfect association), that doesn't assume any
+particular shape of relationship.
+
+```{python}
+from scipy.stats import chi2_contingency
+
+is_severe = (y == "Severe")
+
+def cramers_v(column: str) -> float:
+    table = pd.crosstab(df[column], is_severe)
+    chi2 = chi2_contingency(table)[0]
+    n = table.sum().sum()
+    r, k = table.shape
+    return (chi2 / n / min(k - 1, r - 1)) ** 0.5
+
+association = pd.Series(
+    {col: cramers_v(col) for col in config.RAW_FEATURE_COLS if col != config.TIME_COL}
+).sort_values(ascending=False)
+association.head(10).to_frame("Cramér's V")
+```
+
+`Number_of_vehicles_involved` comes out on top, with `Age_band_of_driver`,
+`Types_of_Junction`, `Type_of_vehicle`, and `Cause_of_accident` clustered
+behind it. I want to be honest about the scale here: by the usual rule
+of thumb for Cramér's V, anything below ~0.1 counts as a weak
+association, and even the top score (~0.16) only counts as
+weak-to-moderate. No single feature comes close to fully determining
+severity on its own — consistent with the macro-F1 scores below landing
+in the 0.6-0.8 range rather than 0.95+.
+
+### The clearest example of why this matters: vehicle count
+
+```{python}
+severity_rate = pd.DataFrame({"is_severe": is_severe.astype(int), "n_vehicles": df["Number_of_vehicles_involved"]})
+by_vehicles = severity_rate.groupby("n_vehicles")["is_severe"].agg(["mean", "count"])
+by_vehicles.columns = ["severity_rate", "n_accidents"]
+print("Pearson correlation:", round(severity_rate.corr().iloc[0, 1], 4))
+by_vehicles
+```
+
+The Pearson correlation between vehicle count and severity is a weak
+**-0.10** — on its own, that suggests "basically nothing going on
+here." But the table tells a completely different story: severity is
+**highest at the extremes** (1 vehicle: 28.2%, 6 vehicles: 28.6%) and
+**lowest in the middle** (4 vehicles: 10.7%), with 2-vehicle crashes —
+the most common kind by far, 8,340 of them — sitting below average at
+12.8%. That's a U-shape, not a line, so a linear correlation averages
+the "down" half against the "up" half and reports something close to
+zero. This makes sense once I thought about it: a single-vehicle
+accident is often a loss-of-control or pedestrian-strike event, both
+tend to be violent, while a 2-3 vehicle crash is more often a
+lower-speed collision between moving traffic.
+
+### Light conditions, driver age, and time of day
+
+```{python}
+baseline_rate = is_severe.mean()
+light = df.assign(is_severe=is_severe.astype(int)).groupby("Light_conditions")["is_severe"].agg(["mean", "count"])
+light.columns = ["severity_rate", "n_accidents"]
+light = light.sort_values("severity_rate", ascending=False)
+
+fig, ax = plt.subplots(figsize=(7, 3.2))
+ax.barh(light.index, light["severity_rate"], color=PALETTE[0])
+ax.axvline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
+ax.set_xlabel("Severity rate")
+ax.legend()
+plt.show()
+light
+```
+
+This is the single clearest, most actionable finding in this whole
+section: accidents in **darkness with no street lighting** turn severe
+**28.1% of the time — nearly double** the daylight rate of 14.9%, and
+clearly higher than darkness where lights are actually lit (16.2%). It
+isn't "nighttime" that's dangerous by itself — it's specifically the
+*absence of lighting infrastructure*, since lit darkness sits much
+closer to the daylight rate than the unlit rate does. That distinction
+matters: it points at fixable infrastructure, not an unfixable fact
+about nighttime driving.
+
+```{python}
+age = df.assign(is_severe=is_severe.astype(int)).groupby("Age_band_of_driver")["is_severe"].agg(["mean", "count"])
+age.columns = ["severity_rate", "n_accidents"]
+age = age.reindex(["Under 18", "18-30", "31-50", "Over 51", "Unknown"])
+
+fig, ax = plt.subplots(figsize=(6, 3.2))
+ax.bar(age.index, age["severity_rate"], color=PALETTE[0])
+ax.axhline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
+ax.set_ylabel("Severity rate")
+ax.legend()
+plt.show()
+age
+```
+
+Another U-shape: drivers **under 18** have the highest severity rate of
+any age band (21.9%), drivers **over 51** are second-highest (17.7%),
+and both middle bands sit at or below average. This matches a
+well-documented pattern in road-safety research generally (inexperience
+at one end, slower reaction time and greater physical fragility at the
+other) — reassuring to see reproduced here rather than something
+idiosyncratic to this one dataset, though I'd flag the under-18 group is
+small (825 of 12,316 rows).
+
+```{python}
+hour_col = pd.to_datetime(df[config.TIME_COL], format="%H:%M:%S", errors="coerce").dt.hour
+by_hour = df.assign(is_severe=is_severe.astype(int), hour=hour_col).groupby("hour")["is_severe"].mean()
+
+fig, ax = plt.subplots(figsize=(8, 3.2))
+ax.plot(by_hour.index, by_hour.values, marker="o", color=PALETTE[0])
+ax.axhline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
+ax.set_xlabel("Hour of day")
+ax.set_ylabel("Severity rate")
+ax.legend()
+plt.show()
+```
+
+Severity rate spikes noticeably between roughly 9pm-1am and again in
+the very early morning, the hours when unlit-darkness accidents would
+concentrate, and dips through most of daylight commuting hours. Two
+independent cuts of the data — light condition directly, and time of
+day as a proxy for it — pointing the same direction makes me more
+confident this is a real pattern rather than noise in one column.
+
+Three real, measured findings, none of which needed a model to find:
+unlit darkness roughly doubles severity risk; severity risk is U-shaped
+by both vehicle count and driver age, exactly the kind of pattern a
+plain correlation coefficient would miss; and no single feature
+dominates, meaning severity is genuinely multi-causal. I'll return to
+all three later, once with SHAP and once translated into concrete
+recommendations.
 
 ## Feature engineering
 
@@ -336,7 +496,7 @@ pattern.
 from traffic_accident_severity.interpretability import compute_shap_values, top_shap_features
 
 final_pipeline = model.train_pipeline(X, y, estimator=model.balanced_random_forest_estimator())
-explanation, _ = compute_shap_values(final_pipeline, X, max_samples=500)
+explanation, X_transformed = compute_shap_values(final_pipeline, X, max_samples=500)
 top = top_shap_features(explanation, top_n=12, class_index=1).sort_values("mean_abs_shap")
 
 fig, ax = plt.subplots(figsize=(6, 5))
@@ -346,33 +506,117 @@ ax.set_title("Top 12 features driving Severe predictions")
 plt.show()
 ```
 
-### What these features would mean for Vietnam
+### Checking SHAP against the EDA — and catching my own mistake
 
-The features SHAP ranks highest for Severe are almost all things a city
-traffic authority can actually act on, which is what makes this more
-than an academic exercise:
+I didn't want to just read the bar chart and move on, so I checked
+whether SHAP's top features agree with what the plain EDA (above)
+already found, before any model existed. Mostly, they do:
+`Number_of_vehicles_involved` tops both rankings, and hour-of-day shows
+up strongly in both — a statistical association test and a trained
+model's own explanation of itself landing on the same answer is a good
+sign neither is a fluke.
 
-- **Number of vehicles involved** and **junction type** dominate —
-  multi-vehicle collisions and crossing-type junctions carry
-  disproportionate Severe risk. That points at *where* to intervene,
-  not just *who* to blame.
-- **Time of day** and **weather** show up clearly too, plausibly
-  reflecting visibility and traffic-flow conditions rather than any
-  single driver behavior.
-- An unrecorded/unknown age band (plausibly a proxy for unlicensed or
-  informally-recorded drivers) and day of week both rank in the top 12
-  — worth investigating further, though I'd want more than a SHAP
+But `Types_of_Junction_Crossing` ranking highly in SHAP made me stop
+and check its *direction*, not just its magnitude — and I'm glad I did,
+because my first draft of this section got it backwards. A high mean
+absolute SHAP value only says a feature matters a lot, not which way it
+pushes the prediction. Checking the actual signed SHAP values for rows
+that really are at a Crossing junction:
+
+```{python}
+sample_idx = X_transformed.index
+is_crossing = (X.loc[sample_idx, "Types_of_Junction"] == "Crossing")
+crossing_col = [f for f in explanation.feature_names if f == "categorical__Types_of_Junction_Crossing"][0]
+crossing_shap = explanation.values[:, list(explanation.feature_names).index(crossing_col), 1]
+print("Mean SHAP when actually at a Crossing junction:", round(crossing_shap[is_crossing.values].mean(), 4))
+print("Mean SHAP otherwise:", round(crossing_shap[~is_crossing.values].mean(), 4))
+```
+
+Being at a Crossing junction pushes the prediction *toward* Not Severe,
+not Severe — consistent with the EDA table above, where Crossing had
+the *lowest* severity rate of any junction type (11.8% vs. 15.4%
+overall). SHAP correctly identified junction type as important; I
+initially misread which direction that importance pointed. I'm leaving
+this correction in rather than quietly fixing it, because it's a real
+example of exactly the kind of mistake a feature-importance chart makes
+easy to make if you only look at magnitude and skip checking direction
+against the underlying data.
+
+### What this actually says, direction included
+
+- **`Number_of_vehicles_involved`** — the U-shape from the EDA section:
+  single-vehicle and 6-vehicle accidents are riskiest, typical 2-4
+  vehicle crashes are safest.
+- **`Types_of_Junction`** — "Crossing" junctions are *safer* than
+  average here, not more dangerous; "Other"/unusual junction types
+  carry more risk. Any junction-redesign priority should be guided by a
+  given city's own measured numbers, not an assumption that crossings
+  are inherently the most dangerous junction type.
+- **Hour of day and weather** show up clearly, plausibly reflecting
+  visibility and traffic-flow conditions rather than any single
+  driver's behavior — consistent with the lighting/time-of-day findings
+  above.
+- An unrecorded/unknown age band and day-of-week both rank in the top
+  12 — worth investigating further, though I'd want more than a SHAP
   ranking alone before treating either as causal.
 
-Mapping this back to Vietnam, the same categories of lever seem like
-they'd matter there too: **junction design and signage at crossing-type
-intersections**, **stricter enforcement around multi-vehicle collision
-hotspots**, and **weather/visibility-aware traffic management**. I want
-to be careful not to overclaim here — this is a correlational SHAP
-ranking on Ethiopian data, not a Vietnamese study, and it can't prove
-causation. What it does show is what a similar analysis on real
-Vietnamese accident records — if that data ever became available —
-would likely need to prioritize first.
+## What this means in practice: policymakers and drivers
+
+I didn't want this project to stop at "here's a model with such-and-such
+macro-F1." The whole point of predicting accident severity is that
+someone could actually use the findings — so here's what I'd tell two
+different audiences, each backed by a specific measured number rather
+than a general impression.
+
+**For policymakers and city traffic authorities:**
+
+- **Street lighting is the single most concrete, evidence-backed
+  intervention this dataset supports.** Unlit-darkness accidents turn
+  severe 28.1% of the time vs. 14.9% in daylight, while darkness *with*
+  working lights (16.2%) sits much closer to the daylight rate. Auditing
+  which known accident spots lack working streetlights, and
+  prioritizing those for investment, is a direct, actionable next step.
+- **Junction design matters, but crossings specifically are not the
+  worst offender here** — the opposite of my first assumption, and a
+  reminder that redesign budgets should follow a city's own measured
+  numbers rather than an assumption about which junction type is
+  riskiest.
+- **Young (under-18) and older (over-51) drivers are both
+  higher-severity groups** (21.9% and 17.7% vs. 14.5% for 31-50 year
+  olds) — consistent with global road-safety research, and the kind of
+  finding graduated-licensing and periodic-reassessment policies
+  elsewhere are built around.
+- **An imperfect severity-detector is still useful as a triage tool.**
+  The threshold-tuning above shows 90% recall costs ~18% precision —
+  meaning roughly 1 in 6 flagged accidents would be a real "Severe"
+  one. For prioritizing which accidents a human investigator reviews
+  first, that beats reviewing everything with no prioritization.
+
+**For everyday drivers:**
+
+- **Treat roads you know lack street lighting with real extra
+  caution at night** — the gap between lit and unlit darkness (16.2% vs.
+  28.1%) suggests visibility specifically, not just the hour, drives the
+  added risk.
+- **A single-vehicle loss-of-control moment is riskier than it might
+  feel** — 1-vehicle accidents here are as severe (28.2%) as 6-vehicle
+  pileups, and clearly more severe than typical 2-4 vehicle crashes.
+- **If you're a very new or older driver, or driving with one**, this
+  dataset's numbers back the usual advice to build in extra margin —
+  not a statement about any individual's skill, but a pattern that
+  holds across a large sample of real accidents.
+
+I want to be careful about how far I take this: these are associations
+in a historical Ethiopian dataset, not a randomized experiment, and none
+of them prove that changing one factor (e.g. adding a streetlight)
+*causes* a proportional drop in severity — only that the two are
+correlated here. But road-safety policy already runs on exactly this
+kind of observational evidence in practice, and translating these
+findings toward Vietnam's own traffic-safety problem — the motivation
+for this project in the first place — would mean checking whether the
+same patterns (unlit-darkness risk, U-shaped age and vehicle-count
+risk) hold on real Vietnamese accident records, if that data ever
+becomes available, rather than assuming they transfer automatically.
 
 ## Discussion: what would a congestion-forecasting system need?
 
@@ -449,10 +693,29 @@ the more general lesson: when a rare class isn't learnable, the fix
 isn't always a fancier model or more resampling — sometimes it's asking
 a different, still-useful question of the same data.
 
-The SHAP explainability work pointed at concrete, actionable levers —
-junction type, multi-vehicle collisions, time of day, and weather — that
-I think would transfer conceptually to Vietnam's own traffic-safety
-problem, even though this dataset can't prove that directly. Congestion
+Spending real time on EDA before modeling paid off more than I
+expected: Cramér's V caught that `Number_of_vehicles_involved` is the
+single strongest predictor in the dataset, something a plain Pearson
+correlation (-0.10) would have told me to ignore, because the real
+relationship is U-shaped rather than linear. Cross-checking SHAP against
+that same EDA also caught a real mistake in an earlier draft of this
+report — I'd assumed Crossing-type junctions were more dangerous because
+they ranked high in SHAP, when the actual (and correct) direction is
+the opposite. I'm glad I checked rather than trusting a feature-
+importance chart's magnitude alone; it's a mistake I'd genuinely make
+again if I stopped being careful about direction, not just magnitude.
+
+Beyond the modeling choices, I wanted this project to answer a
+question a metric alone can't: so what? Unlit-darkness accidents are
+nearly twice as severe as daylight ones, severity risk is U-shaped by
+both driver age and vehicle count, and no single factor dominates —
+severity here is genuinely multi-causal. Translated into practice, that
+points at concrete, fixable levers (street lighting, age-targeted
+licensing policy) rather than vague appeals to "drive safely." Whether
+these specific patterns hold in Vietnam's own traffic — the motivation
+for this project in the first place — is a question only real
+Vietnamese accident data could answer; what this project can offer in
+the meantime is a worked template for how to ask it honestly. Congestion
 forecasting, the natural next traffic-management question, needs
 different data and a different modeling paradigm entirely — a scope
 boundary worth stating plainly rather than blurring.

@@ -163,14 +163,15 @@ quarto render report/report.qmd
 pytest tests/
 ```
 
-## Public deployment
-
-- GitHub Pages: <https://nhamhhung.github.io/traffic-accident-severity/>
-- Streamlit: <https://traffic-accident-severity.streamlit.app>
-- Clone/fork deployment guide: [`docs/SETUP_AND_DEPLOYMENT.md`](docs/SETUP_AND_DEPLOYMENT.md)
-
-For Streamlit Community Cloud, configure `KAGGLE_API_TOKEN` after confirming access to the documented Kaggle dataset. This directory is published as its own repository and does not depend on the parent workspace.
-
 These test the feature engineering and model logic directly with
 synthetic data — no download needed, and they already pass without any
 real data.
+
+## Deploy
+
+The Streamlit app fetches its source data through the Kaggle API at runtime. Configure either KAGGLE_API_TOKEN or a [kaggle] secrets section containing username and key.
+
+- Repository: <https://github.com/nhamhhung/traffic-accident-severity>
+- Report: <https://nhamhung.github.io/traffic-accident-severity/>
+- Streamlit: <https://traffic-accident-severity.streamlit.app>
+- Fork setup: [docs/SETUP_AND_DEPLOYMENT.md](docs/SETUP_AND_DEPLOYMENT.md)
