@@ -9,6 +9,7 @@ deploying without a Docker image that already bakes the file in; see
 
 from pathlib import Path
 from io import BytesIO
+import gzip
 import os
 import zipfile
 
@@ -69,6 +70,13 @@ def load_accidents() -> pd.DataFrame:
             payload = archive.read(members[0])
     else:
         payload = path.read_bytes()
+
+    # The fast hosted sample is deliberately stored as ``.csv.gz`` to
+    # keep the repository small.  Once bytes are read manually, pandas
+    # can no longer infer compression from the filename, so decompress
+    # the gzip payload before applying the encoding fallbacks below.
+    if payload.startswith(b"\x1f\x8b"):
+        payload = gzip.decompress(payload)
 
     if payload.startswith((b"\xff\xfe", b"\xfe\xff")):
         return pd.read_csv(BytesIO(payload), encoding="utf-16")
