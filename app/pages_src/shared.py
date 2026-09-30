@@ -30,8 +30,8 @@ def get_accidents_df() -> pd.DataFrame:
             token = None
 
     try:
-        downloaded = data.download_accidents(api_token=token)
-        return pd.read_csv(downloaded)
+        data.download_accidents(api_token=token)
+        return data.load_accidents()
     except (FileNotFoundError, RuntimeError):
         st.error(
             "The accident dataset is unavailable. Add `KAGGLE_API_TOKEN` to "

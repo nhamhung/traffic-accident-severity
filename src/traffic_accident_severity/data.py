@@ -6,6 +6,8 @@ duplicated here). Download it first — see the project README.
 
 import os
 import shutil
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -64,8 +66,29 @@ def _require_file(path: Path) -> Path:
 
 
 def load_accidents() -> pd.DataFrame:
-    """Load the full accident-record table."""
-    return pd.read_csv(_require_file(config.RAW_CSV))
+    """Load records from a CSV or from ZIP bytes saved with a CSV suffix.
+
+    Some hosted download paths return the Kaggle archive payload at the
+    configured ``RTA Dataset.csv`` path. Content detection prevents Pandas
+    from trying to decode the ZIP header as UTF-8.
+    """
+    path = _require_file(config.RAW_CSV)
+    if zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            members = [name for name in archive.namelist() if name.lower().endswith(".csv")]
+            if not members:
+                raise ValueError(f"{path} is a ZIP archive without a CSV file.")
+            payload = archive.read(members[0])
+    else:
+        payload = path.read_bytes()
+
+    if payload.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return pd.read_csv(BytesIO(payload), encoding="utf-16")
+
+    try:
+        return pd.read_csv(BytesIO(payload), encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return pd.read_csv(BytesIO(payload), encoding="cp1252")
 
 
 def split_features_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
