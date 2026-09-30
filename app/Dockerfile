@@ -7,16 +7,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY app/requirements.txt app/requirements.txt
+RUN pip install --no-cache-dir -r app/requirements.txt
 
 COPY src/ src/
 COPY app/ app/
 COPY models/ models/
-# The app reads the full accident table directly (for the Predict page's
-# real-record picker, and Overview/Model Insights' live EDA/SHAP) —
-# download it first, see the README's "Get the data" section.
-COPY "data/raw/RTA Dataset.csv" "data/raw/RTA Dataset.csv"
 
 EXPOSE 8501
 

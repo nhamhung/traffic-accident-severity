@@ -19,3 +19,6 @@ xgboost>=2.0
 
 # Model interpretability (SHAP)
 shap>=0.45
+
+# Automatic dataset download on deployments without a pre-baked Docker image
+kaggle>=1.6
