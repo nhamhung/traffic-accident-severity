@@ -42,6 +42,12 @@ def _load_random_accident():
     for col in config.RAW_FEATURE_COLS:
         st.session_state[_field_key(col)] = row[col]
     st.session_state["hour_pick"] = int(pd.to_datetime(row[config.TIME_COL], format="%H:%M:%S").hour)
+    st.session_state["loaded_accident_features"] = {
+        col: st.session_state[_field_key(col)] for col in config.RAW_FEATURE_COLS
+    }
+    st.session_state["loaded_accident_features"][config.TIME_COL] = (
+        f"{st.session_state['hour_pick']:02d}:00:00"
+    )
     raw_severity = row[config.TARGET_COL]
     st.session_state["actual_severity_raw"] = raw_severity
     st.session_state["actual_severity"] = "Severe" if raw_severity in config.SEVERE_CLASSES else "Not Severe"
@@ -55,6 +61,7 @@ def _reset_to_average():
     st.session_state["hour_pick"] = int(pd.to_datetime(defaults[config.TIME_COL], format="%H:%M:%S").hour)
     st.session_state.pop("actual_severity", None)
     st.session_state.pop("actual_severity_raw", None)
+    st.session_state.pop("loaded_accident_features", None)
     st.session_state["loaded_a_record"] = False
 
 
@@ -68,6 +75,21 @@ def _select(col: str, options: list, defaults: dict):
     if st.session_state[_field_key(col)] not in options:
         st.session_state[_field_key(col)] = options[0]
     st.selectbox(col, options=options, key=_field_key(col))
+
+
+def _matches_loaded_accident(current: dict, reference: dict | None = None) -> bool:
+    """Only a completely unchanged historical row has valid ground truth."""
+    if reference is None:
+        reference = st.session_state.get("loaded_accident_features")
+    if not reference or set(reference) != set(config.RAW_FEATURE_COLS):
+        return False
+    for col in config.RAW_FEATURE_COLS:
+        current_value, reference_value = current[col], reference[col]
+        if pd.isna(current_value) and pd.isna(reference_value):
+            continue
+        if current_value != reference_value:
+            return False
+    return True
 
 
 def render():
@@ -96,7 +118,10 @@ def render():
         st.button("↺ Reset to dataset average", on_click=_reset_to_average, width="stretch")
 
     if st.session_state.get("loaded_a_record"):
-        st.info("Loaded a real accident record. Its actual severity is revealed after you predict.")
+        st.info(
+            "Loaded a real accident record. Its recorded severity is shown only "
+            "while every field remains unchanged."
+        )
 
     st.subheader("The fields that matter most")
     st.caption("Promoted to the top based on this project's SHAP analysis — see Model Insights.")
@@ -164,14 +189,17 @@ def render():
 
         actual = st.session_state.get("actual_severity")
         actual_raw = st.session_state.get("actual_severity_raw")
-        if actual is not None:
-            match = "✅ matches the model" if actual == prediction else "❌ differs from the model"
+        if actual is not None and _matches_loaded_accident(row):
+            match = "✅ matches the recorded outcome" if actual == prediction else "❌ differs from the recorded outcome"
             st.subheader(
-                f"Prediction: **{prediction}**  |  Actual: **{actual}** "
+                f"Prediction: **{prediction}**  |  Recorded outcome: **{actual}** "
                 f"(originally recorded as *{actual_raw}*) ({match})"
             )
+            st.caption("This comparison is for one unchanged historical row; it is not proof that the model is always correct.")
         else:
             st.subheader(f"Prediction: **{prediction}**")
+            if actual is not None:
+                st.info("The loaded accident's fields were edited, so its original recorded severity no longer applies and is not compared.")
 
         proba_df = pd.DataFrame({"Severity": classes, "Probability": proba}).sort_values(
             "Probability", ascending=False
