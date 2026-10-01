@@ -179,7 +179,11 @@ def render():
         _select("Pedestrian_movement", sorted(df["Pedestrian_movement"].dropna().unique().tolist()), defaults)
 
     if st.button("Predict severity", type="primary"):
-        row = {col: st.session_state[_field_key(col)] for col in config.RAW_FEATURE_COLS}
+        row = {
+            col: st.session_state[_field_key(col)]
+            for col in config.RAW_FEATURE_COLS
+            if col != config.TIME_COL
+        }
         row[config.TIME_COL] = f"{st.session_state['hour_pick']:02d}:00:00"
         X = pd.DataFrame([row])[config.RAW_FEATURE_COLS]
 
