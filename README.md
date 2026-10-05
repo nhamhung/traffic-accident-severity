@@ -21,6 +21,17 @@ STATS19), which are purely car-centric. Not a claim that Ethiopian and
 Vietnamese traffic are the same — just that the *kind* of problem is
 far more comparable.
 
+## Prerequisites
+
+Install once, before Setup below:
+
+| Dependency | Why | Install |
+|---|---|---|
+| **Python 3.12** | This project's `.venv` is built against 3.12 — a different version may resolve incompatible package versions from `requirements.txt`. | [python.org/downloads](https://www.python.org/downloads/) or a version manager (e.g. `pyenv install 3.12`) |
+| **Quarto** | Renders `report/report.qmd` — a standalone binary, not a Python package, so `pip install` never gets it. | [quarto.org/docs/get-started](https://quarto.org/docs/get-started/) |
+| **Kaggle API token** | Needed only for the complete dataset; the default Streamlit app uses a bundled sample, and `pytest` uses synthetic data. | Kaggle account → **Account → Create New API Token** → save the downloaded file as `~/.kaggle/kaggle.json` (`%USERPROFILE%\.kaggle\kaggle.json` on Windows). See the [Kaggle API docs](https://www.kaggle.com/docs/api). |
+| **Docker** (optional) | Only if you want to run the app in its pre-baked container instead of `streamlit run`. | [docker.com/get-started](https://www.docker.com/get-started/) |
+
 ## What's here
 
 | Deliverable | Where |
@@ -34,6 +45,32 @@ All four share one feature-engineering/model source of truth in
 `src/traffic_accident_severity/`, so the notebook, the app, and the
 script can never quietly drift apart — they all load the same trained
 `models/model.joblib`.
+
+## Making changes
+
+`src/traffic_accident_severity/` is the single source of truth —
+`config.py` (paths, schema, the Severe/Not-Severe target collapse),
+`data.py` (loading/splitting), `features.py` (feature engineering),
+`model.py` (pipelines, training, evaluation), `interpretability.py`
+(SHAP). The notebook, the app, and `scripts/train.py` all import from
+here; nothing re-derives logic locally, so a change here propagates
+everywhere automatically.
+
+The edit loop:
+
+```bash
+# 1. Edit src/traffic_accident_severity/*.py
+
+# 2. Check it against the test suite (fast, synthetic data, no download needed)
+PYTHONPATH=src:. pytest tests/
+
+# 3. Retrain, so models/model.joblib reflects your change
+PYTHONPATH=src:. python scripts/train.py   # or --model, --resample, etc. — see --help
+```
+
+`models/model.joblib` is what the notebook, the app, and the report all
+load — retraining is the one step that makes a model-code change visible
+everywhere else.
 
 ## The central data-understanding decision this project is built around
 
@@ -98,14 +135,24 @@ tests/                   # pytest tests for feature engineering and model code (
 ## Setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python3.12 -m venv .venv          # use the 3.12 interpreter specifically
+source .venv/bin/activate         # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+The notebook and `report/report.qmd` both pin a named Jupyter kernel
+(`traffic-accident-severity`), so register one from this venv before
+running either of them:
+
+```bash
+python -m ipykernel install --user --name traffic-accident-severity \
+    --display-name "traffic-accident-severity"
 ```
 
 ## Get the data
 
-This project doesn't commit the dataset. Download it with the
+The complete dataset is not committed. A bundled 1,200-row stratified sample
+keeps the Streamlit app responsive. Download the full dataset with the
 [Kaggle API](https://www.kaggle.com/docs/api) (`pip install kaggle`,
 then put your `kaggle.json`/access token in `~/.kaggle/`):
 
@@ -125,10 +172,10 @@ jupyter notebook notebooks/01_eda_and_modeling.ipynb
 ## Train from the command line
 
 ```bash
-python scripts/train.py                              # default: Random Forest (balanced) — the honest winner
-python scripts/train.py --model LightGBM              # any model in MODEL_FACTORIES
-python scripts/train.py --resample                    # ADASYN instead of class-weighting, for comparison
-python scripts/train.py --help
+PYTHONPATH=src:. python scripts/train.py                              # default: Random Forest (balanced) — the honest winner
+PYTHONPATH=src:. python scripts/train.py --model LightGBM              # any model in MODEL_FACTORIES
+PYTHONPATH=src:. python scripts/train.py --resample                    # ADASYN instead of class-weighting, for comparison
+PYTHONPATH=src:. python scripts/train.py --help
 ```
 
 ## Run the app
@@ -157,10 +204,46 @@ Then open http://localhost:8501.
 quarto render report/report.qmd
 ```
 
+This regenerates both `report/report.html` and `report/report.pdf` (PDF
+needs a LaTeX distribution — if you don't have one, run
+`quarto install tinytex` once). Render just one format when you don't need
+both:
+
+```bash
+quarto render report/report.qmd --to html
+quarto render report/report.qmd --to pdf
+```
+
+Live-preview while editing (auto-rerenders on save):
+
+```bash
+quarto preview report/report.qmd
+```
+
+A `.qmd` file is Markdown prose plus fenced Python code chunks
+(` ```{python} `/` ``` `), executed top to bottom by the kernel registered
+above, same as a notebook cell. Common per-chunk options (a `#|` comment,
+first line of the chunk): `#| echo: false` (hide this chunk's source
+code), `#| output: false` (suppress its output, e.g. a setup/import cell),
+`#| label: fig-foo` + `#| fig-cap: "..."` (name and caption a figure for
+cross-referencing). The [Quarto VS Code
+extension](https://marketplace.visualstudio.com/items?itemName=quarto.quarto)
+adds syntax highlighting and a one-click Render button if you're doing more
+than a one-line edit.
+
+Troubleshooting:
+
+| Symptom | Likely cause |
+|---|---|
+| `Jupyter engine failed ... kernel not found` | The `ipykernel install --name traffic-accident-severity` step above (under Setup) hasn't been run yet. |
+| `ModuleNotFoundError` inside a code chunk | `quarto render` runs with its working directory set to `report/`, not the project root — check the chunk's `sys.path.insert(0, "../src")` points at the right relative path. |
+| Output looks stale after editing | Force a clean re-run: `quarto render report/report.qmd --execute-daemon-restart`. |
+| PDF render fails, HTML succeeds | Missing LaTeX — run `quarto install tinytex` once, then retry. |
+
 ## Run the tests
 
 ```bash
-pytest tests/
+PYTHONPATH=src:. pytest tests/
 ```
 
 These test the feature engineering and model logic directly with
