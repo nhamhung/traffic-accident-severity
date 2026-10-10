@@ -1,212 +1,213 @@
-"""Predict page: load a real accident record (or start from dataset
-averages), tweak the handful of fields that matter most, and see the
-model's predicted severity update.
+"""Trang Dự đoán: chọn hoàn cảnh của một vụ tai nạn, xem mô hình đánh giá
+khả năng nghiêm trọng và lý do.
 
-Only pre-accident risk-factor fields are shown — never the casualty-
-outcome columns (`Casualty_severity`, `Number_of_casualties`, ...),
-which the model was never trained on (see `config.py`'s module
-docstring for why). Fields most likely to matter (by SHAP importance)
-are promoted to the top, instead of asking anyone to fill in 24 fields
-with no sense of which ones count.
+Only pre-crash conditions are offered (driver, vehicle, road, weather,
+collision) - never casualty outcomes, which the model never sees.
 """
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 from . import shared
-from traffic_accident_severity import config
+from traffic_accident_severity import config, vi
 
-PROMOTED_FIELDS = [
-    "Cause_of_accident",
-    "Number_of_vehicles_involved",
-    "Light_conditions",
-    "Weather_conditions",
-    "Type_of_collision",
-    "Road_surface_conditions",
-]
+MAIN_FIELDS = ["Light_conditions", "Type_of_collision", "Number_of_vehicles_involved", "Cause_of_accident",
+               "Age_band_of_driver", "Types_of_Junction"]
+GROUPS = {
+    "🧑 Người lái": ["Sex_of_driver", "Driving_experience", "Educational_level", "Vehicle_driver_relation"],
+    "🚗 Phương tiện": ["Type_of_vehicle", "Owner_of_vehicle", "Service_year_of_vehicle", "Defect_of_vehicle",
+                      "Vehicle_movement"],
+    "🛣️ Con đường": ["Area_accident_occured", "Lanes_or_Medians", "Road_allignment", "Road_surface_type",
+                    "Road_surface_conditions", "Weather_conditions"],
+    "🚶 Người đi bộ và thời gian": ["Pedestrian_movement", "Day_of_week"],
+}
 
 
-def _field_key(col: str) -> str:
+def _key(col: str) -> str:
     return f"field_{col}"
 
 
-def _init_field_state(col: str, default_value):
-    key = _field_key(col)
-    if key not in st.session_state:
-        st.session_state[key] = default_value
-
-
-def _load_random_accident():
-    df = shared.get_accidents_df()
-    row = df.sample(1).iloc[0]
+def _set_from_row(row: pd.Series | dict) -> None:
     for col in config.RAW_FEATURE_COLS:
-        st.session_state[_field_key(col)] = row[col]
-    st.session_state["hour_pick"] = int(pd.to_datetime(row[config.TIME_COL], format="%H:%M:%S").hour)
-    st.session_state["loaded_accident_features"] = {
-        col: st.session_state[_field_key(col)] for col in config.RAW_FEATURE_COLS
-    }
-    st.session_state["loaded_accident_features"][config.TIME_COL] = (
-        f"{st.session_state['hour_pick']:02d}:00:00"
-    )
-    raw_severity = row[config.TARGET_COL]
-    st.session_state["actual_severity_raw"] = raw_severity
-    st.session_state["actual_severity"] = "Severe" if raw_severity in config.SEVERE_CLASSES else "Not Severe"
-    st.session_state["loaded_a_record"] = True
+        if col == config.TIME_COL:
+            continue
+        value = row[col]
+        if col == "Number_of_vehicles_involved":
+            st.session_state[_key(col)] = int(value)
+        else:
+            st.session_state[_key(col)] = value if isinstance(value, str) else None
+    hour = pd.to_datetime(row[config.TIME_COL], format="%H:%M:%S", errors="coerce")
+    st.session_state["hour_pick"] = int(hour.hour) if not pd.isna(hour) else 12
 
 
-def _reset_to_average():
-    defaults = shared.get_default_row()
-    for col in config.RAW_FEATURE_COLS:
-        st.session_state[_field_key(col)] = defaults[col]
-    st.session_state["hour_pick"] = int(pd.to_datetime(defaults[config.TIME_COL], format="%H:%M:%S").hour)
-    st.session_state.pop("actual_severity", None)
-    st.session_state.pop("actual_severity_raw", None)
-    st.session_state.pop("loaded_accident_features", None)
-    st.session_state["loaded_a_record"] = False
+def _load_random_accident() -> None:
+    row = shared.get_accidents_df().sample(1).iloc[0]
+    _set_from_row(row)
+    st.session_state["loaded"] = {c: st.session_state.get(_key(c)) for c in config.RAW_FEATURE_COLS
+                                  if c != config.TIME_COL} | {"hour": st.session_state["hour_pick"]}
+    st.session_state["loaded_severity"] = row[config.TARGET_COL]
 
 
-def _select(col: str, options: list, defaults: dict):
-    _init_field_state(col, defaults[col])
-    # A widget with a `key` already present in session_state must not also
-    # receive `index` (Streamlit treats that as two conflicting sources of
-    # truth) — so any out-of-`options` value (e.g. a NaN from a real
-    # record, or a missing default) is sanitized into session_state
-    # *before* the widget is created, rather than passed as `index`.
-    if st.session_state[_field_key(col)] not in options:
-        st.session_state[_field_key(col)] = options[0]
-    st.selectbox(col, options=options, key=_field_key(col))
+def _reset() -> None:
+    _set_from_row(shared.get_default_row())
+    st.session_state.pop("loaded", None)
+    st.session_state.pop("loaded_severity", None)
+
+
+def _current_row() -> dict:
+    row = {c: st.session_state.get(_key(c)) for c in config.RAW_FEATURE_COLS if c != config.TIME_COL}
+    row[config.TIME_COL] = f"{st.session_state['hour_pick']:02d}:00:00"
+    return row
+
+
+def _unchanged_since_load(row: dict) -> bool:
+    loaded = st.session_state.get("loaded")
+    if not loaded:
+        return False
+    return all(loaded[c] == row[c] for c in loaded if c != "hour") and loaded["hour"] == st.session_state["hour_pick"]
 
 
 def _matches_loaded_accident(current: dict, reference: dict | None = None) -> bool:
-    """Only a completely unchanged historical row has valid ground truth."""
+    """Only a completely unchanged historical row has a valid recorded outcome."""
     if reference is None:
         reference = st.session_state.get("loaded_accident_features")
     if not reference or set(reference) != set(config.RAW_FEATURE_COLS):
         return False
     for col in config.RAW_FEATURE_COLS:
-        current_value, reference_value = current[col], reference[col]
-        if pd.isna(current_value) and pd.isna(reference_value):
+        a, b = current[col], reference[col]
+        if pd.isna(a) and pd.isna(b):
             continue
-        if current_value != reference_value:
+        if a != b:
             return False
     return True
 
 
-def render():
-    st.title("🎯 Predict Accident Severity")
-    st.caption(
-        "Predicts whether an accident with these pre-crash conditions is "
-        "likely to be **Severe** (a serious or fatal injury) or **Not "
-        "Severe** (a slight injury) — using only information available "
-        "*before* the crash (driver, vehicle, road, weather, collision "
-        "dynamics), never casualty outcomes recorded afterward."
+def _select(col: str) -> None:
+    values = shared.options(col)
+    if st.session_state.get(_key(col)) not in values:
+        st.session_state[_key(col)] = values[0]
+    st.selectbox(vi.col(col), values, key=_key(col), format_func=lambda v: vi.val(col, v))
+
+
+def _explanation_chart(contrib: pd.Series, row: dict):
+    top = contrib.reindex(contrib.abs().sort_values(ascending=False).index).head(7)[::-1]
+
+    def label(feature: str) -> str:
+        if feature == "hour":
+            return f"Giờ: {st.session_state['hour_pick']}h"
+        value = row.get(feature)
+        shown = value if feature == "Number_of_vehicles_involved" else vi.val(feature, value)
+        return f"{vi.col(feature)}: {shown}"
+
+    fig, ax = plt.subplots(figsize=(7.5, 0.5 * len(top) + 0.8))
+    ax.barh([label(f) for f in top.index], top.values,
+            color=[shared.SEVERE_COLOUR if v > 0 else shared.SAFE_COLOUR for v in top.values])
+    ax.axvline(0, color="#444", lw=0.8)
+    ax.set_xticks([])  # the units (log-odds) mean nothing to students; bar length is the message
+    ax.set_xlabel("← ít nguy hiểm hơn            nguy hiểm hơn →")
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.tick_params(axis="y", labelsize=9)
+    fig.tight_layout()
+    return fig
+
+
+def render() -> None:
+    st.title("🎯 Dự đoán mức độ nghiêm trọng của tai nạn")
+    st.markdown(
+        "Hãy chọn **hoàn cảnh** của một vụ tai nạn: trời sáng hay tối, đâm vào gì, người lái bao nhiêu tuổi… "
+        "Mô hình sẽ cho biết **khả năng vụ đó nghiêm trọng** (có người bị thương nặng hoặc tử vong) "
+        "và **vì sao** nó nghĩ như vậy."
     )
+    st.caption("Mô hình chỉ dùng thông tin có trước hoặc ngay lúc va chạm, không bao giờ dùng kết quả "
+               "sau tai nạn (ai bị thương, bị thương thế nào).")
 
     try:
-        pipeline = shared.get_pipeline()
+        severity_model = shared.get_model()
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()
+    facts = shared.get_json("data_facts.json")
+    summary = shared.get_json("summary.json")
+    base_rate = facts["severe_share"]
 
-    df = shared.get_accidents_df()
-    defaults = shared.get_default_row()
+    if _key("Light_conditions") not in st.session_state:
+        _reset()
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.button("🎲 Load a random real accident", on_click=_load_random_accident, width="stretch")
-    with col2:
-        st.button("↺ Reset to dataset average", on_click=_reset_to_average, width="stretch")
+    b1, b2 = st.columns(2)
+    b1.button("🎲 Lấy một vụ tai nạn có thật", on_click=_load_random_accident, width="stretch")
+    b2.button("↺ Về vụ tai nạn \"điển hình\"", on_click=_reset, width="stretch")
 
-    if st.session_state.get("loaded_a_record"):
-        st.info(
-            "Loaded a real accident record. Its recorded severity is shown only "
-            "while every field remains unchanged."
-        )
-
-    st.subheader("The fields that matter most")
-    st.caption("Promoted to the top based on this project's SHAP analysis — see Model Insights.")
-
-    c1, c2 = st.columns(2)
+    st.subheader("Những yếu tố quan trọng nhất")
+    c1, c2, c3 = st.columns(3)
     with c1:
-        _select("Cause_of_accident", sorted(df["Cause_of_accident"].dropna().unique().tolist()), defaults)
-        _select("Type_of_collision", sorted(df["Type_of_collision"].dropna().unique().tolist()), defaults)
-        _select("Road_surface_conditions", sorted(df["Road_surface_conditions"].dropna().unique().tolist()), defaults)
+        _select("Light_conditions")
+        _select("Type_of_collision")
     with c2:
-        _select("Light_conditions", sorted(df["Light_conditions"].dropna().unique().tolist()), defaults)
-        _select("Weather_conditions", sorted(df["Weather_conditions"].dropna().unique().tolist()), defaults)
-        _init_field_state("Number_of_vehicles_involved", int(defaults["Number_of_vehicles_involved"]))
-        st.number_input(
-            "Number_of_vehicles_involved", min_value=1, max_value=10, step=1,
-            key=_field_key("Number_of_vehicles_involved"),
-        )
+        st.number_input(vi.col("Number_of_vehicles_involved"), min_value=1, max_value=7, step=1,
+                        key=_key("Number_of_vehicles_involved"))
+        _select("Cause_of_accident")
+    with c3:
+        _select("Age_band_of_driver")
+        _select("Types_of_Junction")
+    st.slider("Giờ xảy ra (0 = nửa đêm, 12 = giữa trưa)", 0, 23, key="hour_pick")
 
-    _init_field_state("hour_pick", 12)
-    st.slider("Hour of day", min_value=0, max_value=23, key="hour_pick")
+    with st.expander("Thêm chi tiết (người lái, xe, con đường…)"):
+        for title, cols in GROUPS.items():
+            st.markdown(f"**{title}**")
+            columns = st.columns(3)
+            for i, col in enumerate(cols):
+                with columns[i % 3]:
+                    _select(col)
 
-    with st.expander("Other details (driver, vehicle, road, junction)"):
-        st.markdown("**Driver**")
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            _select("Age_band_of_driver", sorted(df["Age_band_of_driver"].dropna().unique().tolist()), defaults)
-            _select("Sex_of_driver", sorted(df["Sex_of_driver"].dropna().unique().tolist()), defaults)
-        with d2:
-            _select("Educational_level", sorted(df["Educational_level"].dropna().unique().tolist()), defaults)
-            _select("Vehicle_driver_relation", sorted(df["Vehicle_driver_relation"].dropna().unique().tolist()), defaults)
-        with d3:
-            _select("Driving_experience", sorted(df["Driving_experience"].dropna().unique().tolist()), defaults)
-            _select("Day_of_week", sorted(df["Day_of_week"].dropna().unique().tolist()), defaults)
+    row = _current_row()
+    X = pd.DataFrame([row])[config.RAW_FEATURE_COLS]
+    p = float(severity_model.severe_probability(X)[0])
+    threshold = severity_model.threshold
+    severe = p >= threshold
 
-        st.markdown("**Vehicle**")
-        v1, v2 = st.columns(2)
-        with v1:
-            _select("Type_of_vehicle", sorted(df["Type_of_vehicle"].dropna().unique().tolist()), defaults)
-            _select("Owner_of_vehicle", sorted(df["Owner_of_vehicle"].dropna().unique().tolist()), defaults)
-        with v2:
-            _select("Service_year_of_vehicle", sorted(df["Service_year_of_vehicle"].dropna().unique().tolist()), defaults)
-            _select("Defect_of_vehicle", sorted(df["Defect_of_vehicle"].dropna().unique().tolist()), defaults)
-
-        st.markdown("**Road**")
-        r1, r2, r3 = st.columns(3)
-        with r1:
-            _select("Area_accident_occured", sorted(df["Area_accident_occured"].dropna().unique().tolist()), defaults)
-            _select("Lanes_or_Medians", sorted(df["Lanes_or_Medians"].dropna().unique().tolist()), defaults)
-        with r2:
-            _select("Road_allignment", sorted(df["Road_allignment"].dropna().unique().tolist()), defaults)
-            _select("Types_of_Junction", sorted(df["Types_of_Junction"].dropna().unique().tolist()), defaults)
-        with r3:
-            _select("Road_surface_type", sorted(df["Road_surface_type"].dropna().unique().tolist()), defaults)
-            _select("Vehicle_movement", sorted(df["Vehicle_movement"].dropna().unique().tolist()), defaults)
-        _select("Pedestrian_movement", sorted(df["Pedestrian_movement"].dropna().unique().tolist()), defaults)
-
-    if st.button("Predict severity", type="primary"):
-        row = {
-            col: st.session_state[_field_key(col)]
-            for col in config.RAW_FEATURE_COLS
-            if col != config.TIME_COL
-        }
-        row[config.TIME_COL] = f"{st.session_state['hour_pick']:02d}:00:00"
-        X = pd.DataFrame([row])[config.RAW_FEATURE_COLS]
-
-        prediction = pipeline.predict(X)[0]
-        proba = pipeline.predict_proba(X)[0]
-        classes = pipeline.named_steps["model"].classes_
-
-        actual = st.session_state.get("actual_severity")
-        actual_raw = st.session_state.get("actual_severity_raw")
-        if actual is not None and _matches_loaded_accident(row):
-            match = "✅ matches the recorded outcome" if actual == prediction else "❌ differs from the recorded outcome"
-            st.subheader(
-                f"Prediction: **{prediction}**  |  Recorded outcome: **{actual}** "
-                f"(originally recorded as *{actual_raw}*) ({match})"
-            )
-            st.caption("This comparison is for one unchanged historical row; it is not proof that the model is always correct.")
+    st.divider()
+    left, right = st.columns([1, 1.3])
+    with left:
+        st.metric("Khả năng vụ tai nạn nghiêm trọng", shared.pct(p),
+                  f"{p / base_rate:.1f} lần mức trung bình ({shared.pct(base_rate)})".replace(".", ","),
+                  delta_color="off")
+        if severe:
+            st.error(f"⚠️ **Mô hình cảnh báo: có nguy cơ NGHIÊM TRỌNG.** Mô hình bật cảnh báo khi khả năng "
+                     f"từ {shared.pct(threshold)} trở lên.")
         else:
-            st.subheader(f"Prediction: **{prediction}**")
-            if actual is not None:
-                st.info("The loaded accident's fields were edited, so its original recorded severity no longer applies and is not compared.")
+            st.success(f"✅ **Mô hình đánh giá: có lẽ KHÔNG nghiêm trọng.** (Dưới mức cảnh báo "
+                       f"{shared.pct(threshold)}.)")
+        if st.session_state.get("loaded") and _unchanged_since_load(row):
+            actual = st.session_state["loaded_severity"]
+            actual_severe = actual in config.SEVERE_CLASSES
+            verdict = "✅ Mô hình đoán đúng." if actual_severe == severe else "❌ Lần này mô hình đoán sai."
+            st.info(f"Đây là một vụ tai nạn có thật. Thực tế: **{vi.cls(actual)}**. {verdict}")
+        elif st.session_state.get("loaded"):
+            st.caption("Bạn đã thay đổi vụ tai nạn có thật, nên không còn so sánh với kết quả thực tế.")
+        with st.popover("Tại sao lại là " + shared.pct(threshold) + "?"):
+            st.markdown(
+                f"Chỉ khoảng **{shared.pct(base_rate)}** số vụ tai nạn là nghiêm trọng, nên hiếm khi mô hình "
+                f"chắc chắn trên 50%. Nếu chờ đến 50% mới cảnh báo, nó sẽ bỏ sót gần hết các vụ nghiêm trọng. "
+                f"Mức {shared.pct(threshold)} được chọn để cân bằng giữa **bắt được nhiều vụ nghiêm trọng** "
+                f"và **không báo động nhầm quá nhiều**. Xem trang *Mô hình giỏi đến đâu?* để hiểu thêm."
+            )
+    with right:
+        st.markdown("**Vì sao mô hình nghĩ như vậy?**")
+        contrib = severity_model.explain(X).iloc[0]
+        fig = _explanation_chart(contrib, row)
+        st.pyplot(fig, width="stretch")
+        plt.close(fig)
+        st.caption("Thanh đỏ: yếu tố làm vụ này **nguy hiểm hơn** một vụ bình thường. Thanh xanh: yếu tố "
+                   "làm nó **ít nguy hiểm hơn**. Thanh càng dài, ảnh hưởng càng lớn.")
 
-        proba_df = pd.DataFrame({"Severity": classes, "Probability": proba}).sort_values(
-            "Probability", ascending=False
-        )
-        st.bar_chart(proba_df.set_index("Severity"))
-        st.dataframe(proba_df, hide_index=True)
+    shared.glossary("Khả năng (xác suất)", (
+        "Nếu mô hình nói **30%**, nghĩa là trong rất nhiều vụ tai nạn có hoàn cảnh giống hệt thế này, "
+        "khoảng **30 trên 100 vụ** sẽ có người bị thương nặng hoặc tử vong. Nó **không** nói chắc chắn "
+        "vụ này sẽ ra sao."
+    ))
+    st.caption(f"Khi kiểm tra trên những vụ tai nạn nó chưa từng thấy, mô hình phát hiện được khoảng "
+               f"{shared.pct(summary['recall_severe'])} số vụ nghiêm trọng, và khoảng {shared.pct(summary['precision_severe'])} "
+               "số lần cảnh báo là đúng. Nó vẫn bỏ sót và báo nhầm không ít: đây là công cụ học tập, không dùng để "
+               "ra quyết định thật.")
+    shared.source_note()

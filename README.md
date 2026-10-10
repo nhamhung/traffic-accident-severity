@@ -6,6 +6,39 @@ or fatal injury) or **Not Severe** (a slight injury) — motivated by
 traffic congestion and road safety being a major, visible problem in
 Vietnam.
 
+**The app and the report are in Vietnamese**, written for secondary-school
+students: no code in the report, every technical term explained with an
+everyday example, and numbers shown as "out of 1,000 accidents". The code,
+docstrings and this README stay in English for developers. Display labels
+live in one place, `src/traffic_accident_severity/vi.py`; the data and the
+model keep the dataset's original English values.
+
+## Results
+
+5-fold cross-validation **grouped by accident** (see below), repeated 3
+times, decision threshold chosen inside the training folds only
+(`scripts/evaluate.py`, full 12,316-row dataset):
+
+| Model | Macro-F1 | PR-AUC | ROC-AUC |
+|---|---|---|---|
+| Logistic regression (one-hot) | 0.556 | 0.230 | 0.595 |
+| Random Forest, `class_weight="balanced"` (previous model) | 0.586 | 0.275 | 0.650 |
+| Random Forest, tuned (deeper trees, 30% of features per split) | 0.606 | 0.309 | 0.687 |
+| CatBoost (native categoricals) | 0.608 | 0.314 | 0.686 |
+| **CatBoost + tuned Random Forest, averaged (production)** | **0.611** | **0.323** | **0.698** |
+
+PR-AUC baseline (random guessing) is 0.154. At the chosen threshold (0.24)
+the production model catches 37% of severe accidents, and 33% of its alerts
+are right, about 2.2x random.
+
+**Many accidents appear as several rows.** One row is written per vehicle:
+rows sharing time, day, area, light, weather, road surface, collision type,
+vehicle and casualty counts are the same accident (3,003 rows; severity
+agrees within them 94% of the time vs. 74% by chance). Random K-fold puts
+parts of one accident on both sides of the split; grouping them
+(`severity_model.accident_groups`) lowers the previous model's PR-AUC from
+0.289 to 0.275. Every number above uses grouped folds.
+
 ## Why this dataset
 
 No genuinely open, granular Vietnamese accident dataset exists — checked
@@ -64,13 +97,17 @@ The edit loop:
 # 2. Check it against the test suite (fast, synthetic data, no download needed)
 PYTHONPATH=src:. pytest tests/
 
-# 3. Retrain, so models/model.joblib reflects your change
-PYTHONPATH=src:. python scripts/train.py   # or --model, --resample, etc. — see --help
+# 3. Retrain, so models/model.joblib reflects your change (~3 min, full dataset required)
+python scripts/train.py
+
+# 4. Recompute every number the app and the report show (~45 min; --quick for 1 repeat)
+python scripts/evaluate.py
 ```
 
-`models/model.joblib` is what the notebook, the app, and the report all
-load — retraining is the one step that makes a model-code change visible
-everywhere else.
+`models/model.joblib` is the production model the app loads;
+`results/` holds every figure the app and the report show (the app never
+re-runs cross-validation itself). `train.py` refuses to run on the bundled
+1,200-row sample.
 
 ## The central data-understanding decision this project is built around
 
@@ -112,11 +149,12 @@ class-weighting won clearly.
 This is accident-**severity classification**, not traffic-**congestion
 forecasting** — a genuinely different problem (continuous sensor/GPS
 time series on a road-network graph, not individual tabular records).
-`report/report.qmd`'s Discussion section covers what a real
-congestion-forecasting system would need, and specifically what's
-missing for a Vietnam-focused version of one (no fixed sensor network,
-motorbike-dominated flow dynamics unlike the car-only benchmarks the
-standard models are built on).
+A real congestion-forecasting system would need different data and
+models: road-segment speed time series (GPS probes, since Vietnam's urban
+roads lack fixed sensors), graph-based spatio-temporal models, and
+validation on motorbike-dominated traffic rather than car-only freeway
+benchmarks. (The Vietnamese report, written for secondary-school students,
+leaves this discussion out.)
 
 ## Project layout
 
@@ -125,9 +163,10 @@ data/raw/               # downloaded dataset CSV (gitignored — see below)
 data/processed/          # any cached intermediate data (gitignored)
 notebooks/               # the main EDA + modeling notebook
 src/traffic_accident_severity/  # shared config, data loading, feature engineering, model code, SHAP interpretability
-models/                  # trained pipeline artifact (model.joblib)
+models/                  # production model (model.joblib, ~21 MB)
+results/                 # every number the app and the report show (scripts/evaluate.py)
 app/                     # Streamlit app (multi-page, app/pages_src/) + Dockerfile
-scripts/                 # train.py
+scripts/                 # train.py, evaluate.py, smoke_app.py
 report/                  # Quarto research writeup
 tests/                   # pytest tests for feature engineering and model code (synthetic data — no download needed)
 ```
@@ -169,21 +208,26 @@ This produces `data/raw/RTA Dataset.csv`.
 jupyter notebook notebooks/01_eda_and_modeling.ipynb
 ```
 
-## Train from the command line
+## Train and evaluate from the command line
 
 ```bash
-PYTHONPATH=src:. python scripts/train.py                              # default: Random Forest (balanced) — the honest winner
-PYTHONPATH=src:. python scripts/train.py --model LightGBM              # any model in MODEL_FACTORIES
-PYTHONPATH=src:. python scripts/train.py --resample                    # ADASYN instead of class-weighting, for comparison
-PYTHONPATH=src:. python scripts/train.py --help
+python scripts/train.py      # production model: CatBoost + tuned Random Forest, threshold from grouped out-of-fold predictions
+python scripts/evaluate.py   # model comparison, leak check, threshold trade-off, SHAP importance, data facts -> results/
 ```
+
+The original sklearn pipelines (`model.py`: Logistic Regression, Random
+Forest, LightGBM, XGBoost, ADASYN) are still used by the notebook and as
+comparison models in `evaluate.py`.
 
 ## Run the app
 
-A 4-page app: **Predict** (load a real accident record or start from
-dataset averages, tweak the fields that matter most, see the predicted
-severity), **Dataset Overview**, **Feature Engineering**, and **Model
-Insights** (model comparison + class-imbalance comparison + live SHAP).
+A 4-page app in Vietnamese: **Dự đoán** (load a real accident or start
+from a typical one, change the conditions, see the probability, the alert
+and which factors pushed it up or down), **Dữ liệu nói gì?** (findings
+straight from the data), **Chuẩn bị dữ liệu** (no peeking at outcomes, one
+accident = many rows, missing values) and **Mô hình giỏi đến đâu?** (model
+comparison, a threshold slider showing caught / missed / false alarms per
+1,000 accidents, SHAP importance).
 
 ```bash
 streamlit run app/streamlit_app.py
