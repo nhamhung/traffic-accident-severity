@@ -18,4 +18,4 @@ This GitHub Pages site contains static documentation. The interactive Python app
 
 Clone the repository, create a Python 3.11 or 3.12 environment, install `requirements.txt` and `app/requirements.txt`, run `pytest tests/`, then run `python scripts/smoke_app.py`.
 
-Open Predict, Dataset Overview, Feature Engineering, and Model Insights; complete one severity prediction.
+Open Dự đoán, Dữ liệu nói gì?, Chuẩn bị dữ liệu and Mô hình giỏi đến đâu?; load a real accident and read its prediction and explanation.

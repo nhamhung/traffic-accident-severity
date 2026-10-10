@@ -1,8 +1,10 @@
 ---
-title: "Predicting Traffic Accident Severity"
-subtitle: "A worked case study on Addis Ababa's real accident records, motivated by Vietnam's own traffic-safety problem"
+title: "Dự đoán mức độ nghiêm trọng của tai nạn giao thông"
+subtitle: "Máy học có thể nhận ra một vụ tai nạn nguy hiểm từ hoàn cảnh của nó không? Một nghiên cứu trên 12.316 vụ tai nạn có thật"
 author: "Your Name"
 date: today
+lang: vi
+toc-title: "Mục lục"
 format:
   html:
     theme:
@@ -11,716 +13,477 @@ format:
     css: styles.css
     toc: true
     toc-location: left
-    toc-depth: 3
+    toc-depth: 2
     number-sections: true
     code-fold: true
-    code-tools: true
-    code-copy: true
     title-block-banner: true
     fig-width: 7.5
-    fig-height: 4.5
+    fig-height: 4.2
     embed-resources: true
     smooth-scroll: true
   pdf:
     toc: true
     number-sections: true
 execute:
-  echo: true
+  echo: false
   warning: false
   message: false
 jupyter: traffic-accident-severity
 ---
 
 ```{python}
-#| echo: false
 #| output: false
+import json
 import sys
 sys.path.insert(0, "../src")
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
-import seaborn as sns
+from IPython.display import Markdown
 
-PALETTE = ["#2c5cc5", "#5b8def", "#8fb4f2", "#e07a5f", "#81b29a"]
-sns.set_theme(style="whitegrid", font="sans-serif")
-plt.rcParams.update({
-    "figure.dpi": 130,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "axes.titleweight": "600",
-    "axes.titlesize": 13,
-    "axes.labelsize": 11,
-})
+from traffic_accident_severity import config, vi
+
+RESULTS = config.PROJECT_ROOT / "results"
+facts = json.loads((RESULTS / "data_facts.json").read_text(encoding="utf-8"))
+summary = json.loads((RESULTS / "summary.json").read_text())
+rates = pd.read_csv(RESULTS / "rates_by.csv")
+comparison = pd.read_csv(RESULTS / "model_comparison.csv")
+leak = pd.read_csv(RESULTS / "leak_check.csv").set_index("folds")
+tradeoff = pd.read_csv(RESULTS / "threshold_tradeoff.csv")
+importance = pd.read_csv(RESULTS / "feature_importance.csv")
+
+BASE = facts["severe_share"]
+RED, BLUE, GREY = "#d1495b", "#2b59c3", "#8d99ae"
+plt.rcParams.update({"figure.dpi": 130, "axes.spines.top": False, "axes.spines.right": False,
+                     "axes.titlesize": 12, "axes.labelsize": 10})
+
+
+def pct(x, d=0):
+    return f"{100 * x:.{d}f}%".replace(".", ",")
+
+
+def num(x, d=0):
+    return f"{x:,.{d}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def rate(col, value):
+    r = rates[(rates["column"] == col) & (rates["value"].astype(str) == str(value))]
+    return float(r["severe_rate"].iloc[0])
+
+
+def rate_bars(col, order=None, title=None, horizontal=True, min_n=30):
+    r = rates[(rates["column"] == col) & (rates["n"] >= min_n)].copy()
+    if order is not None:
+        r = r.set_index(r["value"].astype(str)).loc[[str(o) for o in order if str(o) in set(r["value"].astype(str))]].reset_index(drop=True)
+    else:
+        r = r.sort_values("severe_rate")
+    labels = [str(v) if col in ("Number_of_vehicles_involved", "hour") else vi.val(col, v) for v in r["value"]]
+    colours = [RED if v > BASE * 1.25 else BLUE for v in r["severe_rate"]]
+    fig, ax = plt.subplots(figsize=(7.5, 0.42 * len(r) + 1.2) if horizontal else (7.5, 3.6))
+    if horizontal:
+        ax.barh(labels, r["severe_rate"], color=colours)
+        ax.axvline(BASE, ls="--", color="gray", label=f"Trung bình ({pct(BASE)})")
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+        ax.set_xlabel("Tỉ lệ vụ nghiêm trọng")
+    else:
+        ax.bar(labels, r["severe_rate"], color=colours)
+        ax.axhline(BASE, ls="--", color="gray", label=f"Trung bình ({pct(BASE)})")
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+        ax.set_ylabel("Tỉ lệ vụ nghiêm trọng")
+    ax.legend(frameon=False)
+    if title:
+        ax.set_title(title)
+    plt.tight_layout()
+    plt.show()
+
+
+new = comparison[comparison["is_final"]].iloc[0]
+old = comparison[comparison["model"] == "old_random_forest"].iloc[0]
+logistic = comparison[comparison["model"] == "logistic"].iloc[0]
 ```
 
 ::: {.callout-tip}
-## Interactive application
-[Open the Streamlit app](https://traffic-accident-severity.streamlit.app){target="_blank"}
+## Ứng dụng tương tác
+[Mở ứng dụng Streamlit](https://traffic-accident-severity.streamlit.app){target="_blank"} để tự chọn hoàn cảnh
+của một vụ tai nạn và xem mô hình dự đoán.
 :::
 
-## Introduction
-
-I started this project because traffic accidents and congestion are
-such a visible, everyday problem in Vietnam's cities, and I wanted to
-try applying what I've learned about classification and imbalanced
-data to a real road-safety question. The obvious first step — finding
-a Vietnamese accident dataset — turned out to be a dead end: I checked,
-and Hanoi's accident records are paper-based police forms, not open
-data anywhere I could find.
-
-So instead I picked a real, well-documented dataset chosen for its
-**contextual** similarity rather than its origin: accident records from
-Addis Ababa sub-city police (2017-2020). It's a developing-country,
-mixed-vehicle urban traffic environment — motorcycles, pedestrians,
-buses, and private cars sharing the same roads, with less-regulated
-driving conditions — which felt a lot closer to Vietnam's own traffic
-reality than the larger, better-known Western datasets I also
-considered (US-Accidents, UK STATS19), which are purely car-centric
-highway/suburban data. I want to be clear about what this claim is and
-isn't: I'm not saying Ethiopian and Vietnamese traffic are the same,
-only that the *kind* of problem — mixed-vehicle, developing urban road
-network — is far more comparable than a US freeway dataset would be.
-
-My task: predict accident **severity** from conditions known *before*
-or *at* the moment of a crash — never from what happened to the people
-involved afterward. The raw data records severity as 3 classes (Slight
-/ Serious / Fatal injury), but as I'll show below, I ended up
-deliberately collapsing that to a binary **Severe vs. Not Severe**
-target instead, after measuring — not assuming — that the 3-class
-version couldn't reliably detect the outcome that matters most.
-
-I also didn't want this to be a project that jumps straight into
-modeling and treats the data itself as a formality. A good chunk of
-this report is a genuinely deep look at the data first — which raw
-factors actually associate with severity, using a method built for
-categorical data instead of a plain correlation matrix that would have
-missed the most important pattern in the dataset — and, once a model
-exists, a deliberate effort to translate what it finds into concrete
-recommendations for two audiences who'd actually care about the answer:
-people who set road-safety policy, and people who just drive on these
-roads every day.
-
-## Data
-
-12,316 real accident records, 32 raw columns.
+## Tóm tắt {.unnumbered}
 
 ```{python}
-from traffic_accident_severity import config, data
-
-df = data.load_accidents()
-print(f"{len(df)} rows, {df.shape[1]} columns")
-df[config.TARGET_COL].value_counts(normalize=True)
+Markdown(f"""
+- **Câu hỏi:** chỉ nhìn vào *hoàn cảnh* của một vụ tai nạn (trời sáng hay tối, đâm vào gì, người lái bao nhiêu
+  tuổi…), máy tính có đoán được vụ đó có **nghiêm trọng** (có người bị thương nặng hoặc tử vong) hay không?
+- **Dữ liệu:** {num(facts['n_rows'])} bản ghi tai nạn có thật ở Addis Ababa (Ethiopia), một thành phố có giao
+  thông hỗn hợp xe máy, ô tô, xe buýt và người đi bộ, khá giống các thành phố Việt Nam.
+- **Phát hiện rõ nhất:** ban đêm **không có đèn đường**, tỉ lệ vụ nghiêm trọng là
+  **{pct(rate('Light_conditions', 'Darkness - no lighting'))}**, gần **gấp đôi** ban ngày
+  ({pct(rate('Light_conditions', 'Daylight'))}). Ban đêm *có* đèn đường thì gần an toàn như ban ngày.
+- **Mô hình:** mô hình mới đạt điểm Macro-F1 **{num(new['f1_tuned'], 3)}** (mô hình cũ: {num(old['f1_tuned'], 3)})
+  khi kiểm tra trên những vụ tai nạn nó chưa từng thấy. Nó có ích hơn đoán bừa rõ rệt, nhưng vẫn bỏ sót và báo
+  nhầm khá nhiều, vì nhiều điều quyết định mức độ nghiêm trọng (tốc độ thật, mũ bảo hiểm…) không có trong dữ liệu.
+""")
 ```
 
-### The central data-understanding decision: excluding casualty outcomes
+## Vì sao làm dự án này?
 
-Looking through the raw columns, I noticed they split into two
-fundamentally different kinds:
+Tai nạn giao thông là một vấn đề rất gần gũi ở Việt Nam. Dự án này muốn thử trả lời một câu hỏi: **nếu biết
+hoàn cảnh của một vụ tai nạn, ta có thể đoán nó nghiêm trọng đến đâu không?** Nếu được, ta sẽ biết những hoàn
+cảnh nào nguy hiểm nhất để ưu tiên phòng tránh.
 
-- **Pre-accident risk factors** (driver, vehicle, road, weather, time,
-  collision dynamics) — knowable before/at the crash, the only kind of
-  feature a real prevention or policy system could act on.
-- **Post-accident casualty-outcome columns** (`Casualty_class`,
-  `Casualty_severity`, `Sex_of_casualty`, `Age_band_of_casualty`,
-  `Work_of_casuality`, `Fitness_of_casuality`, `Number_of_casualties`) —
-  recorded *after* the crash, describing who got hurt and how.
+Bước đầu tiên là tìm dữ liệu tai nạn của Việt Nam, nhưng hồ sơ tai nạn ở Việt Nam chưa được công bố công khai.
+Vì vậy dự án dùng dữ liệu của **cảnh sát thành phố Addis Ababa, thủ đô Ethiopia (2017–2020)**. Lý do chọn: giao
+thông ở đây có **xe máy, xe ba bánh, xe buýt, ô tô và người đi bộ dùng chung đường**, giống Việt Nam hơn nhiều so
+với dữ liệu nổi tiếng của Mỹ hay Anh (chủ yếu ô tô trên đường cao tốc). Điều này **không** có nghĩa là giao thông
+hai nước giống hệt nhau, chỉ là *loại vấn đề* gần nhau hơn.
 
-This second group is a data-leakage trap I nearly walked into: using
-these as features would be circular, since a system that needs to
-already know how badly someone was hurt to predict how badly someone
-was hurt isn't useful for anything. I excluded all of them up front.
+## Dữ liệu ghi lại những gì?
 
 ```{python}
-X, y = data.split_features_target(df)
-print("Feature columns:", len(config.RAW_FEATURE_COLS))
-print("Excluded casualty-outcome columns:", config.CASUALTY_OUTCOME_COLS)
+Markdown(f"""
+Mỗi bản ghi mô tả một vụ tai nạn bằng {facts['n_features']} thông tin có trước hoặc ngay lúc va chạm, chia
+thành các nhóm:
+
+- **Người lái:** tuổi, giới tính, trình độ học vấn, kinh nghiệm lái xe.
+- **Phương tiện:** loại xe, số năm đã sử dụng, xe có lỗi kỹ thuật không.
+- **Con đường:** khu vực, loại giao lộ, làn đường, mặt đường, hình dạng con đường.
+- **Môi trường:** ánh sáng, thời tiết, giờ, thứ trong tuần.
+- **Va chạm:** kiểu va chạm, số xe liên quan, xe đang làm gì, nguyên nhân.
+""")
 ```
 
-### Real data-quality issues, found by checking rather than assuming
+### Không "nhìn trộm" đáp án
 
-- **Severe missingness**: `Defect_of_vehicle` (~36%), `Service_year_of_vehicle`
-  (~32%), `Work_of_casuality` (~26%), `Fitness_of_casuality` (~21%) —
-  I used most-frequent imputation rather than dropping rows, which would
-  have thrown away a large share of an already-small dataset.
-- **Inconsistent time formatting**: I found that `Time` isn't always
-  zero-padded — some rows are `"1:15:00"`, not `"01:15:00"`. My first
-  attempt at parsing this with a naive string-slice silently corrupted
-  single-digit hours; I only caught it while building this project's
-  Streamlit app and noticing the hour distribution looked wrong.
-  `pd.to_datetime(..., format="%H:%M:%S")` parses both forms correctly.
+Dữ liệu còn có những cột ghi lại **sau** tai nạn: ai bị thương, bị thương nặng đến đâu, có bao nhiêu người thương
+vong. Dự án **không** cho mô hình xem những cột này. Nếu cho mô hình biết "có người bị thương nặng" rồi hỏi "vụ
+này có nghiêm trọng không", nó sẽ trả lời rất giỏi nhưng **vô dụng**, giống như được xem đáp án trước khi làm bài.
+Một hệ thống phòng tránh tai nạn chỉ có thể dùng thông tin có **trước** khi tai nạn xảy ra.
 
-## Digging deeper: what actually correlates with severity?
-
-Before any modeling, I wanted to spend more time just looking at the
-data: which of these 23 feature columns actually move the needle on
-whether an accident turns out severe, and by how much? This is worth
-doing *before* modeling — it's the same information SHAP will later
-give me from a trained model, computed here directly from the data with
-no model in between, which makes it a good honesty check on whatever
-the model says later.
-
-### Why Cramér's V, not a plain correlation matrix
-
-My first instinct was `df.corr()` — but almost every column here is
-categorical, and even the numeric-looking ones (`hour`) aren't linear
-in their effect. Pearson correlation only measures *linear* association
-and can completely miss a real relationship that isn't a straight line.
-I used **Cramér's V** instead — an association measure for two
-categorical variables, based on the chi-squared test, ranging from 0
-(no association) to 1 (perfect association), that doesn't assume any
-particular shape of relationship.
+### Phần lớn tai nạn chỉ gây thương tích nhẹ
 
 ```{python}
-from scipy.stats import chi2_contingency
-
-is_severe = (y == "Severe")
-
-def cramers_v(column: str) -> float:
-    table = pd.crosstab(df[column], is_severe)
-    chi2 = chi2_contingency(table)[0]
-    n = table.sum().sum()
-    r, k = table.shape
-    return (chi2 / n / min(k - 1, r - 1)) ** 0.5
-
-association = pd.Series(
-    {col: cramers_v(col) for col in config.RAW_FEATURE_COLS if col != config.TIME_COL}
-).sort_values(ascending=False)
-association.head(10).to_frame("Cramér's V")
-```
-
-`Number_of_vehicles_involved` comes out on top, with `Age_band_of_driver`,
-`Types_of_Junction`, `Type_of_vehicle`, and `Cause_of_accident` clustered
-behind it. I want to be honest about the scale here: by the usual rule
-of thumb for Cramér's V, anything below ~0.1 counts as a weak
-association, and even the top score (~0.16) only counts as
-weak-to-moderate. No single feature comes close to fully determining
-severity on its own — consistent with the macro-F1 scores below landing
-in the 0.6-0.8 range rather than 0.95+.
-
-### The clearest example of why this matters: vehicle count
-
-```{python}
-severity_rate = pd.DataFrame({"is_severe": is_severe.astype(int), "n_vehicles": df["Number_of_vehicles_involved"]})
-by_vehicles = severity_rate.groupby("n_vehicles")["is_severe"].agg(["mean", "count"])
-by_vehicles.columns = ["severity_rate", "n_accidents"]
-print("Pearson correlation:", round(severity_rate.corr().iloc[0, 1], 4))
-by_vehicles
-```
-
-The Pearson correlation between vehicle count and severity is a weak
-**-0.10** — on its own, that suggests "basically nothing going on
-here." But the table tells a completely different story: severity is
-**highest at the extremes** (1 vehicle: 28.2%, 6 vehicles: 28.6%) and
-**lowest in the middle** (4 vehicles: 10.7%), with 2-vehicle crashes —
-the most common kind by far, 8,340 of them — sitting below average at
-12.8%. That's a U-shape, not a line, so a linear correlation averages
-the "down" half against the "up" half and reports something close to
-zero. This makes sense once I thought about it: a single-vehicle
-accident is often a loss-of-control or pedestrian-strike event, both
-tend to be violent, while a 2-3 vehicle crash is more often a
-lower-speed collision between moving traffic.
-
-### Light conditions, driver age, and time of day
-
-```{python}
-baseline_rate = is_severe.mean()
-light = df.assign(is_severe=is_severe.astype(int)).groupby("Light_conditions")["is_severe"].agg(["mean", "count"])
-light.columns = ["severity_rate", "n_accidents"]
-light = light.sort_values("severity_rate", ascending=False)
-
-fig, ax = plt.subplots(figsize=(7, 3.2))
-ax.barh(light.index, light["severity_rate"], color=PALETTE[0])
-ax.axvline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
-ax.set_xlabel("Severity rate")
-ax.legend()
-plt.show()
-light
-```
-
-This is the single clearest, most actionable finding in this whole
-section: accidents in **darkness with no street lighting** turn severe
-**28.1% of the time — nearly double** the daylight rate of 14.9%, and
-clearly higher than darkness where lights are actually lit (16.2%). It
-isn't "nighttime" that's dangerous by itself — it's specifically the
-*absence of lighting infrastructure*, since lit darkness sits much
-closer to the daylight rate than the unlit rate does. That distinction
-matters: it points at fixable infrastructure, not an unfixable fact
-about nighttime driving.
-
-```{python}
-age = df.assign(is_severe=is_severe.astype(int)).groupby("Age_band_of_driver")["is_severe"].agg(["mean", "count"])
-age.columns = ["severity_rate", "n_accidents"]
-age = age.reindex(["Under 18", "18-30", "31-50", "Over 51", "Unknown"])
-
-fig, ax = plt.subplots(figsize=(6, 3.2))
-ax.bar(age.index, age["severity_rate"], color=PALETTE[0])
-ax.axhline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
-ax.set_ylabel("Severity rate")
-ax.legend()
-plt.show()
-age
-```
-
-Another U-shape: drivers **under 18** have the highest severity rate of
-any age band (21.9%), drivers **over 51** are second-highest (17.7%),
-and both middle bands sit at or below average. This matches a
-well-documented pattern in road-safety research generally (inexperience
-at one end, slower reaction time and greater physical fragility at the
-other) — reassuring to see reproduced here rather than something
-idiosyncratic to this one dataset, though I'd flag the under-18 group is
-small (825 of 12,316 rows).
-
-```{python}
-hour_col = pd.to_datetime(df[config.TIME_COL], format="%H:%M:%S", errors="coerce").dt.hour
-by_hour = df.assign(is_severe=is_severe.astype(int), hour=hour_col).groupby("hour")["is_severe"].mean()
-
-fig, ax = plt.subplots(figsize=(8, 3.2))
-ax.plot(by_hour.index, by_hour.values, marker="o", color=PALETTE[0])
-ax.axhline(baseline_rate, linestyle="--", color="gray", label=f"overall rate ({baseline_rate:.1%})")
-ax.set_xlabel("Hour of day")
-ax.set_ylabel("Severity rate")
-ax.legend()
+shares = facts["raw_shares"]
+fig, ax = plt.subplots(figsize=(6, 3))
+names = [vi.cls(k) for k in shares]
+ax.bar(names, list(shares.values()), color=[BLUE, "#f4a261", RED])
+for i, v in enumerate(shares.values()):
+    ax.text(i, v + 0.01, pct(v, 1), ha="center")
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+ax.set_ylabel("Tỉ lệ số vụ")
+plt.tight_layout()
 plt.show()
 ```
 
-Severity rate spikes noticeably between roughly 9pm-1am and again in
-the very early morning, the hours when unlit-darkness accidents would
-concentrate, and dips through most of daylight commuting hours. Two
-independent cuts of the data — light condition directly, and time of
-day as a proxy for it — pointing the same direction makes me more
-confident this is a real pattern rather than noise in one column.
-
-Three real, measured findings, none of which needed a model to find:
-unlit darkness roughly doubles severity risk; severity risk is U-shaped
-by both vehicle count and driver age, exactly the kind of pattern a
-plain correlation coefficient would miss; and no single feature
-dominates, meaning severity is genuinely multi-causal. I'll return to
-all three later, once with SHAP and once translated into concrete
-recommendations.
-
-## Feature engineering
-
 ```{python}
-from traffic_accident_severity.features import FeatureEngineer
-
-engineered = FeatureEngineer().fit_transform(X)
-engineered[["hour", "hour_sin", "hour_cos"]].describe().T
+Markdown(f"""
+Chỉ **{pct(shares['Fatal injury'], 1)}** số vụ có người tử vong, tức khoảng
+{num(shares['Fatal injury'] * facts['n_rows'])} vụ. Quá ít để máy học nhận ra riêng nhóm này: khi thử, mô hình
+gần như không phát hiện được vụ tử vong nào. Vì vậy dự án **gộp "bị thương nặng" và "tử vong" thành một nhóm:
+nghiêm trọng** (khoảng {pct(BASE)} số vụ). Câu hỏi trở thành: *vụ này có nghiêm trọng không?* Đây vẫn là câu
+hỏi hữu ích: một hệ thống cảnh báo cần biết vụ nào *nguy hiểm*, không nhất thiết phải phân biệt nặng với tử vong.
+""")
 ```
 
-- **Circular hour-of-day encoding** (`hour_sin`/`hour_cos`) — hour 23
-  and hour 0 are one hour apart, not "far away" from each other, so I
-  placed hour on a 24-hour circle instead of leaving it as a plain
-  integer — a standard technique for any periodic feature.
-- **`RareCategoryGrouper`** on `Cause_of_accident` (20 distinct values),
-  `Type_of_vehicle` (17), and `Area_accident_occured` (14) — a standard
-  technique for long-tailed categorical variables generally.
+## Dữ liệu nói gì?
 
-## Choosing the modeling target: binary Severe, not raw 3-class
+Trước khi dùng máy học, hãy tự nhìn vào dữ liệu. Với mỗi nhóm (ví dụ: *ban đêm, không có đèn đường*), ta tính
+**tỉ lệ nghiêm trọng**: trong 100 vụ thuộc nhóm đó, có bao nhiêu vụ nghiêm trọng. Đường gạch đứt là mức trung
+bình. Nhóm có dưới 30 vụ được bỏ qua vì quá ít để tin.
 
-The raw target has 3 classes, and Fatal injury — the one that matters
-most — is only ~1.3% of rows (~158 total). Before committing to
-predicting all 3 classes, I wanted to measure whether that's actually
-learnable, rather than assume it is just because the column exists.
+### Thiếu đèn đường, không phải "ban đêm", mới là điều nguy hiểm
 
 ```{python}
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report
-from traffic_accident_severity import model, config
-
-X_raw = df[config.RAW_FEATURE_COLS]
-y_raw = df[config.TARGET_COL]  # still the raw 3-class column here
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X_raw, y_raw, test_size=0.2, stratify=y_raw, random_state=config.RANDOM_SEED
-)
-raw_pipeline = model.build_pipeline(model.balanced_random_forest_estimator())
-raw_pipeline.fit(X_train, y_train)
-print(classification_report(y_test, raw_pipeline.predict(X_test), digits=3))
-```
-
-Even with class-weighting, Fatal injury's recall is around 3% — the
-model is essentially not detecting it. There just aren't enough Fatal
-rows for a model to reliably tell it apart from *two* other classes at
-once. Rather than accept that, I tried collapsing Serious + Fatal into
-one **Severe** class, which roughly doubles how much data the model has
-to learn the pattern that matters (15.4% of rows vs. 1.3%):
-
-```{python}
-X, y = data.split_features_target(df)  # y is now binary: "Severe" vs "Not Severe"
-print(y.value_counts(normalize=True))
-
-X_train_b, X_test_b, y_train_b, y_test_b = train_test_split(
-    X, y, test_size=0.2, stratify=y, random_state=config.RANDOM_SEED
-)
-severe_pipeline = model.build_pipeline(model.balanced_random_forest_estimator())
-severe_pipeline.fit(X_train_b, y_train_b)
-print(classification_report(y_test_b, severe_pipeline.predict(X_test_b), digits=3))
-```
-
-Recall for the outcome that matters most goes from ~3% to roughly
-30-35% — a real, substantial improvement, not a marginal one. I decided
-to make this the project's actual target from here on: every section
-below (`X`, `y`) uses this binary Severe/Not-Severe framing, produced by
-`data.split_features_target`, not the raw 3-class column. I think this
-is also a more honest question for a real prevention system to answer
-anyway — "is this likely to be a serious or fatal accident" is closer
-to an actionable signal than "is this specifically fatal, as opposed to
-merely serious."
-
-## Methodology
-
-### Why macro-F1, made concrete
-
-```{python}
-baseline = model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5)
-print(f"Accuracy: {baseline['accuracy_mean']:.4f}")
-print(f"Macro-F1: {baseline['f1_macro_mean']:.4f}")
-```
-
-The first time I ran this, the ~84.6% accuracy looked encouraging —
-until I noticed it's almost exactly the majority-class ("Not Severe")
-share. A model that mostly just predicts "Not Severe" for everything
-would score similarly, which told me accuracy wasn't measuring what I
-actually cared about. Macro-F1 told a very different story, exposing
-how poorly that same model handles the Severe class. I used macro-F1
-for every comparison from this point on.
-
-### Class-imbalance handling, compared honestly
-
-Severe is only ~15.4% of rows (~1,901 total) — still imbalanced enough
-that it shapes every modeling decision from here on. I compared two
-different fixes rather than assuming either one would help:
-
-```{python}
-imbalance_results = pd.DataFrame([
-    {"approach": "Plain Random Forest", **model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5)},
-    {"approach": "Random Forest + ADASYN", **model.cross_validate_pipeline(X, y, estimator=model.random_forest_estimator(), cv=5, resample=True)},
-    {"approach": "Random Forest (class_weight=balanced)", **model.cross_validate_pipeline(X, y, estimator=model.balanced_random_forest_estimator(), cv=5)},
-])
-imbalance_results[["approach", "f1_macro_mean", "accuracy_mean"]]
+rate_bars("Light_conditions")
 ```
 
 ```{python}
-fig, ax = plt.subplots(figsize=(6, 3.2))
-ax.barh(imbalance_results["approach"], imbalance_results["f1_macro_mean"], color=[PALETTE[3], PALETTE[2], PALETTE[0]])
-ax.set_xlabel("Macro-F1")
+Markdown(f"""
+Đây là phát hiện rõ ràng và hữu ích nhất của dự án. Ban đêm **không có đèn đường**:
+**{pct(rate('Light_conditions', 'Darkness - no lighting'))}** số vụ là nghiêm trọng, gần **gấp đôi** ban ngày
+({pct(rate('Light_conditions', 'Daylight'))}). Nhưng ban đêm **có đèn đường** chỉ là
+{pct(rate('Light_conditions', 'Darkness - lights lit'))}, gần bằng ban ngày. Vậy điều nguy hiểm là **thiếu
+ánh sáng**, và đó là điều có thể khắc phục bằng cách lắp đèn đường.
+""")
+```
+
+### Hình chữ U: một xe, hoặc rất nhiều xe
+
+```{python}
+order = sorted(rates.loc[rates["column"] == "Number_of_vehicles_involved", "value"].unique(), key=lambda v: int(float(v)))
+rate_bars("Number_of_vehicles_involved", order=order, horizontal=False, title="Theo số xe liên quan")
+```
+
+Tai nạn **chỉ một xe** thường là mất lái hoặc tông vào người đi bộ, và thường nặng. Tai nạn hai, ba xe thường là
+va quẹt khi đang di chuyển chậm, nên nhẹ hơn. Khi số xe rất lớn, nguy hiểm lại tăng. Biểu đồ có **hình chữ U**.
+
+Điều thú vị: nếu chỉ tính **hệ số tương quan** thông thường (một con số đo xem hai thứ có cùng tăng, cùng giảm
+không), ta sẽ thấy số xe *gần như không liên quan* đến mức độ nghiêm trọng. Lý do là hệ số tương quan chỉ đo xu
+hướng **theo một chiều**: nửa "đi xuống" và nửa "đi lên" của chữ U triệt tiêu nhau. Bài học: **luôn vẽ biểu đồ**,
+đừng chỉ tin vào một con số.
+
+### Người lái rất trẻ và người lái lớn tuổi
+
+```{python}
+rate_bars("Age_band_of_driver", order=["Under 18", "18-30", "31-50", "Over 51", "Unknown"], horizontal=False,
+          title="Theo tuổi người lái")
+```
+
+```{python}
+Markdown(f"""
+Lại một hình chữ U: người lái **dưới 18 tuổi** ({pct(rate('Age_band_of_driver', 'Under 18'))}) và **trên 51
+tuổi** ({pct(rate('Age_band_of_driver', 'Over 51'))}) có tỉ lệ nghiêm trọng cao hơn nhóm 31–50 tuổi
+({pct(rate('Age_band_of_driver', '31-50'))}). Điều này khớp với nghiên cứu an toàn giao thông trên thế giới:
+người trẻ thiếu kinh nghiệm, người lớn tuổi phản xạ chậm hơn và cơ thể dễ tổn thương hơn. Lưu ý nhóm dưới 18 tuổi
+khá nhỏ, nên con số của nhóm này kém chắc chắn hơn.
+""")
+```
+
+### Theo giờ trong ngày
+
+```{python}
+h = rates[rates["column"] == "hour"].copy()
+h["hour"] = h["value"].astype(float).astype(int)
+h = h.sort_values("hour")
+fig, ax = plt.subplots(figsize=(7.5, 3.2))
+ax.plot(h["hour"], h["severe_rate"], marker="o", color=BLUE)
+ax.axhline(BASE, ls="--", color="gray", label=f"Trung bình ({pct(BASE)})")
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+ax.set_xlabel("Giờ trong ngày")
+ax.set_ylabel("Tỉ lệ vụ nghiêm trọng")
+ax.set_xticks(range(0, 24, 2))
+ax.legend(frameon=False)
+plt.tight_layout()
 plt.show()
 ```
 
-**Class-weighting won clearly.** I don't think that's a rule to assume
-for every imbalanced dataset — the better fix genuinely depends on the
-data — which is exactly why I measured it directly instead of picking
-one on instinct. With Severe at ~15.4% of rows, ADASYN's default
-`n_neighbors=5` runs fine here — this needed lowering to 3 back when
-the target was still the raw 3-class column and Fatal injury alone was
-only ~1.3% of rows.
+Tai nạn ban đêm và rạng sáng nặng hơn, khớp với phát hiện về đèn đường. Hai cách nhìn khác nhau (ánh sáng và giờ)
+cùng chỉ về một hướng, nên ta tin hơn rằng đây là quy luật thật chứ không phải ngẫu nhiên.
 
-### Model comparison
+::: {.callout-note}
+## Liên hệ không phải là nguyên nhân
+Những con số trên cho thấy **mối liên hệ**, chưa chứng minh **nguyên nhân**. Ví dụ, đường không có đèn có thể
+cũng là đường ngoại ô, nơi xe chạy nhanh hơn. Muốn chắc chắn "lắp đèn sẽ giảm tai nạn nặng" cần thêm nghiên cứu khác.
+:::
+
+## Một vụ tai nạn, nhiều dòng dữ liệu
 
 ```{python}
-sweep_results = []
-for name, factory in model.MODEL_FACTORIES.items():
-    scores = model.cross_validate_pipeline(X, y, estimator=factory(), cv=5)
-    sweep_results.append({"model": name, **scores})
-sweep_df = pd.DataFrame(sweep_results).sort_values("f1_macro_mean", ascending=False)
-sweep_df[["model", "f1_macro_mean", "accuracy_mean"]]
+Markdown(f"""
+Khi kiểm tra kỹ, dự án phát hiện **{num(facts['rows_in_multi_row_accidents'])} dòng**
+({pct(facts['rows_in_multi_row_accidents'] / facts['n_rows'])} dữ liệu) có cùng giờ, cùng ngày, cùng nơi, cùng
+thời tiết, cùng kiểu va chạm với một dòng khác. Đó là **cùng một vụ tai nạn**, được ghi mỗi xe một dòng. Bằng
+chứng: trong những nhóm này, mức độ nghiêm trọng giống nhau **{pct(facts['multi_row_same_severity'])}** số lần,
+trong khi nếu là các vụ khác nhau thì chỉ khoảng {pct(facts['multi_row_same_severity_by_chance'])}.
+
+**Vì sao điều này quan trọng?** Để biết mô hình giỏi thật hay không, ta phải kiểm tra nó trên những vụ tai nạn nó
+**chưa từng thấy**, giống như đề thi phải khác bài tập. Nếu một dòng của vụ tai nạn nằm trong phần "học" còn dòng
+kia nằm trong phần "thi", mô hình chỉ cần **nhớ** chứ không cần **hiểu**: bị **lộ đề**.
+
+Khi chấm lại mô hình cũ theo cách công bằng (giữ nguyên từng vụ), điểm PR-AUC của nó giảm từ
+{num(leak.loc['random', 'pr_auc'], 3)} xuống **{num(leak.loc['grouped', 'pr_auc'], 3)}**. Mức giảm không lớn,
+nhưng cho thấy điểm cũ hơi "đẹp" hơn thực tế. Mọi con số trong báo cáo này đều dùng cách chấm công bằng.
+""")
 ```
 
+## Dạy máy học
+
+### Máy học là gì?
+
+Hãy tưởng tượng bạn cho một người xem hàng nghìn vụ tai nạn, mỗi vụ kèm hoàn cảnh và kết quả (nghiêm trọng hay
+không). Dần dần người đó nhận ra quy luật: "ban đêm không đèn thì hay nặng", "va quẹt hai xe thì thường nhẹ"…
+**Máy học** làm đúng điều đó, chỉ khác là máy xem được rất nhiều vụ và nhận ra cả những quy luật phức tạp, kết hợp
+nhiều yếu tố cùng lúc.
+
+Kết quả của việc học gọi là **mô hình**. Đưa cho mô hình hoàn cảnh của một vụ mới, nó trả lời **khả năng** vụ đó
+nghiêm trọng, ví dụ 25%.
+
+### Chấm điểm thế nào cho công bằng?
+
 ```{python}
-fig, ax = plt.subplots(figsize=(6, 3.5))
-ax.barh(sweep_df["model"], sweep_df["f1_macro_mean"], color=PALETTE[0])
-ax.set_xlabel("Macro-F1")
-plt.gca().invert_yaxis()
+Markdown(f"""
+Dữ liệu được chia làm 5 phần. Mô hình học trên 4 phần rồi làm bài thi trên phần còn lại, lặp lại cho đủ 5 phần,
+và cả quá trình được làm {summary['repeats']} lần với các cách chia khác nhau. Như đã nói, các dòng của một vụ tai
+nạn luôn ở cùng một phía.
+
+**Cái bẫy "độ chính xác":** một mô hình *lười biếng* luôn trả lời "không nghiêm trọng" sẽ đúng
+**{pct(1 - BASE)}** số lần, vì phần lớn tai nạn đều nhẹ! Nghe thì giỏi, nhưng nó không bao giờ phát hiện được vụ
+nghiêm trọng nào. Vì vậy dự án dùng hai điểm số khác:
+
+- **Macro-F1** (từ 0 đến 1): đo xem mô hình giỏi *cả hai việc*: nhận ra vụ nghiêm trọng và nhận ra vụ không
+  nghiêm trọng, rồi lấy trung bình. Mô hình lười biếng chỉ được khoảng **0,46**.
+- **PR-AUC** (từ 0 đến 1): đo xem mô hình có xếp các vụ nghiêm trọng **lên trên** hay không. Đoán bừa được
+  khoảng **{num(BASE, 2)}**.
+""")
+```
+
+### Các mô hình được thử
+
+```{python}
+comp = comparison.sort_values("f1_tuned")
+fig, ax = plt.subplots(figsize=(7.5, 0.55 * len(comp) + 0.8))
+ax.barh(comp["name_vi"], comp["f1_tuned"], color=[RED if f else GREY for f in comp["is_final"]])
+for i, v in enumerate(comp["f1_tuned"]):
+    ax.text(v + 0.002, i, num(v, 3), va="center")
+ax.axvline(0.458, ls=":", color="gray")
+ax.text(0.46, len(comp) - 0.5, "mô hình lười biếng", color="gray", fontsize=8)
+ax.set_xlim(0.44, comp["f1_tuned"].max() + 0.03)
+ax.set_xlabel("Macro-F1 (càng cao càng tốt)")
+plt.tight_layout()
 plt.show()
 ```
 
-`Random Forest (balanced)` beats even LightGBM and XGBoost here, which
-surprised me a little going in — correctly handling the imbalance
-mattered more than model sophistication.
-
-## Choosing a decision threshold
-
-`Random Forest (balanced)` outputs a *probability* of Severe, and
-`.predict()` just applies a 0.5 cutoff to it internally. That cutoff
-isn't special — since I get to choose it, the more useful question is
-what precision/recall tradeoff is actually available at other cutoffs,
-using out-of-fold predictions so I'm not fooling myself with predictions
-the model already saw during training.
-
 ```{python}
-from sklearn.metrics import average_precision_score
-
-severe_proba = model.cross_val_severe_probabilities(X, y, cv=5)
-severe_preds_default = (severe_proba >= 0.5).astype(int)
-y_numeric = (y == "Severe").astype(int)
-print(classification_report(y_numeric, severe_preds_default, target_names=["Not Severe", "Severe"], digits=3))
-```
-
-At the default threshold, precision and recall for Severe are both
-around 30% — not high in absolute terms, but a genuinely useful signal
-compared to the ~3% Fatal recall the raw 3-class target gave. Since the
-threshold is a free choice, the next step sweeps it directly.
-
-```{python}
-pr_auc = average_precision_score(y_numeric, severe_proba)
-print(f"Average precision (PR-AUC): {pr_auc:.4f}  (base rate: {y_numeric.mean():.4f})")
-
-threshold_sweep = model.severity_threshold_sweep(y, severe_proba, target_recalls=[0.3, 0.5, 0.7, 0.9])
-threshold_sweep
+table = comparison.sort_values("f1_tuned", ascending=False)[["name_vi", "f1_tuned", "pr_auc", "roc_auc"]].copy()
+table.columns = ["Mô hình", "Macro-F1", "PR-AUC", "ROC-AUC"]
+table.round(3)
 ```
 
 ```{python}
-fig, ax = plt.subplots(figsize=(6, 3.5))
-ax.plot(threshold_sweep["recall"], threshold_sweep["precision"], marker="o", color=PALETTE[0])
-for _, row in threshold_sweep.iterrows():
-    ax.annotate(f"thr={row['threshold']:.2f}", (row["recall"], row["precision"]), textcoords="offset points", xytext=(6, 4))
-ax.axhline(y_numeric.mean(), linestyle="--", color="gray", label="base rate")
-ax.set_xlabel("Recall (share of Severe accidents caught)")
-ax.set_ylabel("Precision (share of Severe alerts that are real)")
-ax.legend()
+Markdown(f"""
+- **Hồi quy logistic** là mô hình đơn giản nhất: nó cộng điểm cho từng yếu tố một cách riêng lẻ. Nó kém nhất
+  (Macro-F1 {num(logistic['f1_tuned'], 3)}), cho thấy mức độ nghiêm trọng phụ thuộc vào **sự kết hợp** của nhiều
+  yếu tố (ví dụ: *ban đêm* **và** *không đèn* **và** *tông người đi bộ*), không phải từng yếu tố riêng lẻ.
+- **Rừng ngẫu nhiên** gồm hàng trăm "cây quyết định", mỗi cây là một chuỗi câu hỏi có/không (*Trời tối không? Có
+  đèn không? Mấy xe?*), rồi các cây **bỏ phiếu**. Đây là mô hình cũ của dự án ({num(old['f1_tuned'], 3)}).
+  Tinh chỉnh thêm (cho cây sâu hơn, mỗi lần hỏi xem nhiều thông tin hơn) giúp nó tốt lên.
+- **CatBoost** (mô hình mới, {num(new['f1_tuned'], 3)}) cũng dùng nhiều cây, nhưng các cây được xây **lần lượt**,
+  cây sau sửa lỗi của cây trước. Điểm mạnh của nó là **hiểu trực tiếp các giá trị dạng chữ** như "ban đêm, không
+  đèn", trong khi các mô hình khác phải đổi chúng thành hàng trăm cột 0/1.
+""")
+```
+
+### Khi nào thì bật cảnh báo?
+
+```{python}
+row = tradeoff.iloc[(tradeoff["threshold"] - summary["threshold"]).abs().argmin()]
+severe1000 = round(1000 * BASE)
+caught = round(severe1000 * row["recall"])
+alarms = round(caught / row["precision"])
+Markdown(f"""
+Mô hình đưa ra **khả năng** nghiêm trọng, ví dụ 25%. Ta phải chọn: từ mức nào thì **bật cảnh báo**? Vì chỉ khoảng
+{pct(BASE)} tai nạn là nghiêm trọng, mô hình hiếm khi chắc chắn trên 50%. Nếu chờ đến 50% mới cảnh báo, nó sẽ bỏ
+sót gần hết các vụ nghiêm trọng. Dự án chọn mức **{pct(summary['threshold'])}**, mức cho điểm Macro-F1 cao nhất.
+
+Với mức này, cứ **1.000 vụ tai nạn** thì có khoảng **{severe1000}** vụ nghiêm trọng, và:
+
+- mô hình **bắt được {caught}** vụ nghiêm trọng, **bỏ sót {severe1000 - caught}** vụ;
+- mô hình bật **{alarms}** lần cảnh báo: **{caught}** lần đúng, **{alarms - caught}** lần **báo nhầm**.
+
+Nghe có vẻ chưa tốt, nhưng hãy so với đoán bừa: nếu bật {alarms} cảnh báo một cách ngẫu nhiên, chỉ khoảng
+{round(alarms * BASE)} lần là đúng. Mô hình đúng gấp khoảng {num(caught / (alarms * BASE), 1)} lần.
+""")
+```
+
+```{python}
+fig, ax = plt.subplots(figsize=(6.5, 3.8))
+ax.plot(tradeoff["recall"], tradeoff["precision"], color=BLUE)
+ax.scatter([row["recall"]], [row["precision"]], s=90, color=RED, zorder=3, label=f"Mức đã chọn ({pct(summary['threshold'])})")
+for t in (0.1, 0.3, 0.5):
+    r = tradeoff.iloc[(tradeoff["threshold"] - t).abs().argmin()]
+    ax.annotate(f"mức {pct(t)}", (r["recall"], r["precision"]), xytext=(6, 4), textcoords="offset points", fontsize=8)
+ax.axhline(BASE, ls="--", color="gray", label="Đoán bừa")
+ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+ax.set_xlabel("Tỉ lệ vụ nghiêm trọng bắt được")
+ax.set_ylabel("Tỉ lệ cảnh báo là đúng")
+ax.legend(frameon=False)
+plt.tight_layout()
 plt.show()
 ```
 
-The PR-AUC (~0.29) is roughly 2x the base rate (~0.154) — a real
-improvement over guessing. The curve makes the tradeoff at the extremes
-visible: to catch 90% of Severe accidents, precision drops to ~18% —
-about 1 in 6 "Severe" alerts would be real. At the more conservative
-30% recall end, precision is closer to 31%. Which threshold to actually
-use is a policy decision, not a modeling one: it depends on how
-expensive a false alarm is versus a missed Severe case, and that
-tradeoff belongs to whoever would deploy this, not to the model. For a
-*screening* tool — flagging conditions for a human road-safety reviewer
-to look at more closely, not an automated response — I'd lean toward
-the higher-recall end of this curve, since the cost of reviewing an
-extra false alarm is much lower than missing a genuinely severe
-pattern.
+Mức thấp hơn: bắt được nhiều hơn nhưng báo nhầm nhiều hơn. Mức cao hơn: ngược lại. Chọn mức nào là **quyết định
+của con người**, tùy vào việc bỏ sót một vụ nghiêm trọng tệ đến đâu so với một lần báo nhầm. Nếu mô hình chỉ dùng
+để gợi ý vụ nào cần xem xét trước, báo nhầm thêm vài lần cũng không sao, nên có thể chọn mức thấp.
 
-## Model interpretability
+## Mô hình dựa vào điều gì?
+
+Để hiểu mô hình, dự án dùng phương pháp **SHAP**: với mỗi vụ, đo xem từng thông tin đẩy dự đoán **lên** (nguy hiểm
+hơn) hay **xuống** (an toàn hơn) bao nhiêu, rồi lấy trung bình trên toàn bộ dữ liệu.
 
 ```{python}
-from traffic_accident_severity.interpretability import compute_shap_values, top_shap_features
-
-final_pipeline = model.train_pipeline(X, y, estimator=model.balanced_random_forest_estimator())
-explanation, X_transformed = compute_shap_values(final_pipeline, X, max_samples=500)
-top = top_shap_features(explanation, top_n=12, class_index=1).sort_values("mean_abs_shap")
-
-fig, ax = plt.subplots(figsize=(6, 5))
-ax.barh(top["feature"], top["mean_abs_shap"], color=PALETTE[0])
-ax.set_xlabel("Mean |SHAP value| for the Severe class")
-ax.set_title("Top 12 features driving Severe predictions")
+imp = importance.head(12).iloc[::-1]
+fig, ax = plt.subplots(figsize=(7.5, 4.6))
+ax.barh([vi.col(f) for f in imp["feature"]], imp["share"], color=BLUE)
+ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: pct(v)))
+ax.set_xlabel("Mức độ ảnh hưởng (phần trăm tổng)")
+plt.tight_layout()
 plt.show()
 ```
 
-### Checking SHAP against the EDA — and catching my own mistake
-
-I didn't want to just read the bar chart and move on, so I checked
-whether SHAP's top features agree with what the plain EDA (above)
-already found, before any model existed. Mostly, they do:
-`Number_of_vehicles_involved` tops both rankings, and hour-of-day shows
-up strongly in both — a statistical association test and a trained
-model's own explanation of itself landing on the same answer is a good
-sign neither is a fluke.
-
-But `Types_of_Junction_Crossing` ranking highly in SHAP made me stop
-and check its *direction*, not just its magnitude — and I'm glad I did,
-because my first draft of this section got it backwards. A high mean
-absolute SHAP value only says a feature matters a lot, not which way it
-pushes the prediction. Checking the actual signed SHAP values for rows
-that really are at a Crossing junction:
-
 ```{python}
-sample_idx = X_transformed.index
-is_crossing = (X.loc[sample_idx, "Types_of_Junction"] == "Crossing")
-crossing_col = [f for f in explanation.feature_names if f == "categorical__Types_of_Junction_Crossing"][0]
-crossing_shap = explanation.values[:, list(explanation.feature_names).index(crossing_col), 1]
-print("Mean SHAP when actually at a Crossing junction:", round(crossing_shap[is_crossing.values].mean(), 4))
-print("Mean SHAP otherwise:", round(crossing_shap[~is_crossing.values].mean(), 4))
+top3 = ", ".join(f"**{vi.col(f).lower()}**" for f in importance["feature"].head(3))
+Markdown(f"""
+Ba thông tin mô hình dựa vào nhiều nhất là {top3}. Không có yếu tố nào chiếm phần lớn: mức độ nghiêm trọng của
+một vụ tai nạn đến từ **nhiều nguyên nhân cùng lúc**.
+
+**Một bài học về cẩn thận.** Biểu đồ trên chỉ cho biết một yếu tố **quan trọng đến đâu**, không cho biết nó làm
+vụ tai nạn **nguy hiểm hơn hay an toàn hơn**. Trong phiên bản đầu của dự án, *loại giao lộ* đứng cao trong bảng
+xếp hạng và tác giả đã vội kết luận "ngã tư nguy hiểm". Khi kiểm tra lại, hóa ra ngược lại: ngã tư có vạch qua
+đường có tỉ lệ nghiêm trọng **thấp hơn** trung bình ({pct(rate('Types_of_Junction', 'Crossing'))} so với
+{pct(BASE)}). Luôn kiểm tra **chiều** ảnh hưởng, không chỉ **độ lớn**.
+""")
 ```
 
-Being at a Crossing junction pushes the prediction *toward* Not Severe,
-not Severe — consistent with the EDA table above, where Crossing had
-the *lowest* severity rate of any junction type (11.8% vs. 15.4%
-overall). SHAP correctly identified junction type as important; I
-initially misread which direction that importance pointed. I'm leaving
-this correction in rather than quietly fixing it, because it's a real
-example of exactly the kind of mistake a feature-importance chart makes
-easy to make if you only look at magnitude and skip checking direction
-against the underlying data.
+## Điều này có ý nghĩa gì trong thực tế?
 
-### What this actually says, direction included
+```{python}
+Markdown(f"""
+**Với những người quản lý giao thông:**
 
-- **`Number_of_vehicles_involved`** — the U-shape from the EDA section:
-  single-vehicle and 6-vehicle accidents are riskiest, typical 2-4
-  vehicle crashes are safest.
-- **`Types_of_Junction`** — "Crossing" junctions are *safer* than
-  average here, not more dangerous; "Other"/unusual junction types
-  carry more risk. Any junction-redesign priority should be guided by a
-  given city's own measured numbers, not an assumption that crossings
-  are inherently the most dangerous junction type.
-- **Hour of day and weather** show up clearly, plausibly reflecting
-  visibility and traffic-flow conditions rather than any single
-  driver's behavior — consistent with the lighting/time-of-day findings
-  above.
-- An unrecorded/unknown age band and day-of-week both rank in the top
-  12 — worth investigating further, though I'd want more than a SHAP
-  ranking alone before treating either as causal.
+- **Đèn đường là biện pháp rõ ràng nhất mà dữ liệu ủng hộ.** Thiếu đèn: {pct(rate('Light_conditions', 'Darkness - no lighting'))}
+  vụ nghiêm trọng; có đèn: {pct(rate('Light_conditions', 'Darkness - lights lit'))}. Rà soát những điểm hay xảy ra
+  tai nạn mà chưa có đèn là một việc làm cụ thể.
+- **Người lái rất trẻ và lớn tuổi** cần được quan tâm hơn, ví dụ qua đào tạo lái xe kỹ hơn cho người mới và kiểm
+  tra sức khỏe định kỳ cho người lớn tuổi.
+- **Một mô hình chưa hoàn hảo vẫn có ích** để sắp xếp thứ tự ưu tiên: xem xét những vụ mô hình cảnh báo trước vẫn
+  tốt hơn xem xét ngẫu nhiên.
 
-## What this means in practice: policymakers and drivers
+**Với mỗi người tham gia giao thông:**
 
-I didn't want this project to stop at "here's a model with such-and-such
-macro-F1." The whole point of predicting accident severity is that
-someone could actually use the findings — so here's what I'd tell two
-different audiences, each backed by a specific measured number rather
-than a general impression.
+- **Đi đường tối, không đèn, hãy giảm tốc độ và cẩn thận gấp đôi.** Chính việc *không nhìn rõ* làm tăng nguy hiểm.
+- **Tai nạn một xe (tự ngã, mất lái) nguy hiểm hơn ta nghĩ:** {pct(rate('Number_of_vehicles_involved', 1))} vụ một
+  xe là nghiêm trọng, cao hơn hẳn vụ hai xe ({pct(rate('Number_of_vehicles_involved', 2))}).
+- **Nếu bạn sắp được lái xe**, hãy nhớ nhóm người lái dưới 18 tuổi có tỉ lệ nghiêm trọng cao nhất. Kinh nghiệm
+  đến từ thời gian, nên hãy giữ khoảng cách và tốc độ an toàn.
+""")
+```
 
-**For policymakers and city traffic authorities:**
+## Giới hạn của dự án
 
-- **Street lighting is the single most concrete, evidence-backed
-  intervention this dataset supports.** Unlit-darkness accidents turn
-  severe 28.1% of the time vs. 14.9% in daylight, while darkness *with*
-  working lights (16.2%) sits much closer to the daylight rate. Auditing
-  which known accident spots lack working streetlights, and
-  prioritizing those for investment, is a direct, actionable next step.
-- **Junction design matters, but crossings specifically are not the
-  worst offender here** — the opposite of my first assumption, and a
-  reminder that redesign budgets should follow a city's own measured
-  numbers rather than an assumption about which junction type is
-  riskiest.
-- **Young (under-18) and older (over-51) drivers are both
-  higher-severity groups** (21.9% and 17.7% vs. 14.5% for 31-50 year
-  olds) — consistent with global road-safety research, and the kind of
-  finding graduated-licensing and periodic-reassessment policies
-  elsewhere are built around.
-- **An imperfect severity-detector is still useful as a triage tool.**
-  The threshold-tuning above shows 90% recall costs ~18% precision —
-  meaning roughly 1 in 6 flagged accidents would be a real "Severe"
-  one. For prioritizing which accidents a human investigator reviews
-  first, that beats reviewing everything with no prioritization.
+- **Dữ liệu từ Ethiopia, không phải Việt Nam.** Những quy luật này cần được kiểm tra lại trên dữ liệu Việt Nam
+  trước khi áp dụng.
+- **Liên hệ không phải nguyên nhân.** Dữ liệu ghi lại những gì đã xảy ra, không phải một thí nghiệm có kiểm soát.
+- **Thiếu những thông tin quan trọng:** tốc độ thật của xe, có đội mũ bảo hiểm hay thắt dây an toàn không, xe cứu
+  thương đến nhanh hay chậm. Đây là lý do chính khiến mô hình còn bỏ sót và báo nhầm nhiều. Không mô hình nào
+  đoán đúng những gì nó không được biết.
+- **Dữ liệu có lỗi ghi chép:** một số cột bị bỏ trống nhiều, và có vài giá trị bị ghi sai chính tả trong dữ liệu gốc.
 
-**For everyday drivers:**
+## Kết luận
 
-- **Treat roads you know lack street lighting with real extra
-  caution at night** — the gap between lit and unlit darkness (16.2% vs.
-  28.1%) suggests visibility specifically, not just the hour, drives the
-  added risk.
-- **A single-vehicle loss-of-control moment is riskier than it might
-  feel** — 1-vehicle accidents here are as severe (28.2%) as 6-vehicle
-  pileups, and clearly more severe than typical 2-4 vehicle crashes.
-- **If you're a very new or older driver, or driving with one**, this
-  dataset's numbers back the usual advice to build in extra margin —
-  not a statement about any individual's skill, but a pattern that
-  holds across a large sample of real accidents.
+```{python}
+Markdown(f"""
+Dự án cho thấy máy học **có thể** nhận ra những vụ tai nạn nguy hiểm tốt hơn đoán bừa rõ rệt (PR-AUC
+{num(new['pr_auc'], 2)} so với {num(BASE, 2)}), nhưng còn xa mới hoàn hảo. Những bài học quan trọng nhất không
+nằm ở việc chọn mô hình nào, mà ở việc **đặt câu hỏi đúng và kiểm tra trung thực**:
 
-I want to be careful about how far I take this: these are associations
-in a historical Ethiopian dataset, not a randomized experiment, and none
-of them prove that changing one factor (e.g. adding a streetlight)
-*causes* a proportional drop in severity — only that the two are
-correlated here. But road-safety policy already runs on exactly this
-kind of observational evidence in practice, and translating these
-findings toward Vietnam's own traffic-safety problem — the motivation
-for this project in the first place — would mean checking whether the
-same patterns (unlit-darkness risk, U-shaped age and vehicle-count
-risk) hold on real Vietnamese accident records, if that data ever
-becomes available, rather than assuming they transfer automatically.
+1. **Không cho mô hình "nhìn trộm" đáp án:** chỉ dùng thông tin có trước tai nạn.
+2. **Chấm điểm công bằng:** một vụ tai nạn không được nằm cả trong bài học lẫn đề thi.
+3. **Đừng tin "độ chính xác" khi dữ liệu lệch:** một mô hình lười biếng cũng đúng {pct(1 - BASE)}.
+4. **Luôn vẽ biểu đồ:** hệ số tương quan bỏ qua những quy luật hình chữ U.
+5. **Kiểm tra chiều ảnh hưởng**, không chỉ độ lớn.
 
-## Discussion: what would a congestion-forecasting system need?
+Và phát hiện có ích nhất lại không cần đến máy học: **thiếu đèn đường gần như nhân đôi nguy cơ tai nạn nghiêm
+trọng**.
+""")
+```
 
-This project predicts accident **severity** — a genuinely different
-problem from predicting traffic **congestion**, even though both fall
-under "traffic management." I think it's worth being precise about the
-difference, since it shapes what would actually help Vietnam next, and
-because it would be easy to walk away from this project overclaiming
-what a severity classifier can do.
+## Câu hỏi suy ngẫm {.unnumbered}
 
-**Different data entirely.** Severity classification needs individual
-accident *records* — one row per crash. Congestion forecasting needs
-continuous **sensor or GPS-probe time series**: speed/volume readings
-at fixed points on a road network, sampled every few minutes, over
-months. The standard public benchmarks — **METR-LA** (207 LA freeway
-sensors) and **PEMS-BAY** (325 Bay Area sensors) — look nothing like
-this project's data: no individual events, just continuous per-sensor
-speed readings.
-
-**Different modeling approach: spatio-temporal, not tabular.** This
-project's classifiers treat every accident record as independent.
-Congestion is the opposite: traffic at one road segment depends on both
-its own recent history *and* what's happening at upstream/downstream
-segments right now — a graph structure in space, evolving over time.
-Standard approaches (**DCRNN**, **Graph WaveNet**) explicitly model the
-road network as a graph, combining graph convolutions with recurrent/
-temporal layers — not something a `RandomForestClassifier` or
-`LGBMClassifier` (this project's tools) can express.
-
-**What Vietnam specifically would need that this project's data can't
-provide:**
-
-- **A sensor network, or a substitute for one.** METR-LA/PEMS-BAY rely
-  on fixed highway loop detectors — infrastructure Vietnam's urban roads
-  mostly lack. The realistic substitute is crowd-sourced **GPS probe
-  data** (ride-hailing/mapping apps) aggregated into road-segment speed
-  estimates — a fundamentally different data-collection problem.
-- **A model of mixed-vehicle flow.** Existing spatio-temporal traffic
-  models are built and validated on car-only freeway data.
-  Motorbike-dominated urban traffic (lane-splitting, informal lane use,
-  far higher vehicle density per road width) behaves differently enough
-  that the same architectures would need real validation on
-  Vietnam-specific data before trusting them.
-- **Integration with accident-risk findings like this project's own.**
-  A genuinely useful combined system wouldn't just forecast where
-  traffic will be slow — it would flag where slow-moving, high-density,
-  mixed-vehicle conditions also historically correlate with severe
-  accidents (this project's junction-type and multi-vehicle-collision
-  findings above), turning two separate models into one early-warning
-  system for both congestion *and* safety.
-
-None of this is a limitation of this project — it's the honest scope
-boundary between two real, different traffic-management problems, and
-I'd rather name that boundary clearly than imply this one classifier
-solves both.
-
-## Conclusion
-
-Working through a severely imbalanced, moderately messy, real accident
-dataset — chosen for contextual relevance to a problem I couldn't get
-open Vietnamese data for directly — taught me a few things I'd want to
-carry into any future imbalanced-classification project: accuracy can
-be actively misleading, class-weighting isn't automatically the right
-fix (it just happened to win here, and only because I checked), and
-correctly handling imbalance mattered more than model choice.
-
-The biggest decision in this project turned out to be the target
-itself, not the model. Measuring — rather than assuming — that the raw
-3-class column left Fatal injury essentially undetected (~3% recall)
-was the key step; collapsing Serious + Fatal into one **Severe** class
-raised that to ~30-35% recall and macro-F1 from ~0.39 to ~0.60, a
-substantial, measured improvement, not a marginal one. I think that's
-the more general lesson: when a rare class isn't learnable, the fix
-isn't always a fancier model or more resampling — sometimes it's asking
-a different, still-useful question of the same data.
-
-Spending real time on EDA before modeling paid off more than I
-expected: Cramér's V caught that `Number_of_vehicles_involved` is the
-single strongest predictor in the dataset, something a plain Pearson
-correlation (-0.10) would have told me to ignore, because the real
-relationship is U-shaped rather than linear. Cross-checking SHAP against
-that same EDA also caught a real mistake in an earlier draft of this
-report — I'd assumed Crossing-type junctions were more dangerous because
-they ranked high in SHAP, when the actual (and correct) direction is
-the opposite. I'm glad I checked rather than trusting a feature-
-importance chart's magnitude alone; it's a mistake I'd genuinely make
-again if I stopped being careful about direction, not just magnitude.
-
-Beyond the modeling choices, I wanted this project to answer a
-question a metric alone can't: so what? Unlit-darkness accidents are
-nearly twice as severe as daylight ones, severity risk is U-shaped by
-both driver age and vehicle count, and no single factor dominates —
-severity here is genuinely multi-causal. Translated into practice, that
-points at concrete, fixable levers (street lighting, age-targeted
-licensing policy) rather than vague appeals to "drive safely." Whether
-these specific patterns hold in Vietnam's own traffic — the motivation
-for this project in the first place — is a question only real
-Vietnamese accident data could answer; what this project can offer in
-the meantime is a worked template for how to ask it honestly. Congestion
-forecasting, the natural next traffic-management question, needs
-different data and a different modeling paradigm entirely — a scope
-boundary worth stating plainly rather than blurring.
+1. Nếu bạn là người quản lý giao thông và chỉ có tiền cho một biện pháp, bạn sẽ chọn gì? Dữ liệu nào ủng hộ lựa
+   chọn của bạn?
+2. Vì sao một mô hình luôn trả lời "không nghiêm trọng" lại có "độ chính xác" cao? Hãy nghĩ một ví dụ khác trong
+   đời sống có cùng cái bẫy này.
+3. Nếu Việt Nam công bố dữ liệu tai nạn, bạn muốn dữ liệu đó ghi thêm thông tin gì để mô hình đoán tốt hơn?
+4. Bỏ sót một vụ nghiêm trọng và báo nhầm một vụ nhẹ, điều nào tệ hơn? Câu trả lời có thay đổi tùy người dùng mô
+   hình không?

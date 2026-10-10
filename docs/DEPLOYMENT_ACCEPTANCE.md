@@ -12,7 +12,7 @@ Record one row after initial deployment and every rollback or material deploymen
 | Pages URL | https://nhamhhung.github.io/traffic-accident-severity/ |
 | Streamlit URL | https://traffic-accident-severity.streamlit.app |
 | `/_stcore/health` HTTP 200 | |
-| Core journey | Open Predict, Dataset Overview, Feature Engineering, and Model Insights; complete one severity prediction. |
+| Core journey | Open Dự đoán, Dữ liệu nói gì?, Chuẩn bị dữ liệu and Mô hình giỏi đến đâu?; load a real accident and read its prediction and explanation. |
 | Keyboard/focus/contrast/alternative-text review | |
 | Known-good tag updated | |
 | Notes | |

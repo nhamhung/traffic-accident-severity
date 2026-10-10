@@ -1,4 +1,4 @@
-"""Multi-page Streamlit app entry point.
+"""Multi-page Streamlit app entry point (giao diện tiếng Việt).
 
 Run locally:
     streamlit run app/streamlit_app.py
@@ -12,14 +12,13 @@ import streamlit as st
 
 from pages_src import feature_engineering, model_insights, overview, predict
 
-st.set_page_config(page_title="Traffic Accident Severity", page_icon="🚦", layout="wide")
+st.set_page_config(page_title="Dự đoán mức độ tai nạn giao thông", page_icon="🚦", layout="wide")
 
 pages = [
-    st.Page(predict.render, title="Predict", icon="🎯", url_path="predict", default=True),
-    st.Page(overview.render, title="Dataset Overview", icon="📊", url_path="overview"),
-    st.Page(feature_engineering.render, title="Feature Engineering", icon="🔧", url_path="feature-engineering"),
-    st.Page(model_insights.render, title="Model Insights", icon="🧠", url_path="model-insights"),
+    st.Page(predict.render, title="Dự đoán", icon="🎯", url_path="predict", default=True),
+    st.Page(overview.render, title="Dữ liệu nói gì?", icon="📊", url_path="overview"),
+    st.Page(feature_engineering.render, title="Chuẩn bị dữ liệu", icon="🔧", url_path="feature-engineering"),
+    st.Page(model_insights.render, title="Mô hình giỏi đến đâu?", icon="🧠", url_path="model-insights"),
 ]
 
-navigation = st.navigation(pages)
-navigation.run()
+st.navigation(pages).run()

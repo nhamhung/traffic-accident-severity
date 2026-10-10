@@ -1,5 +1,12 @@
-"""Cached data/model loaders shared across every page."""
+"""Cached loaders and small display helpers shared by every page.
 
+Every number the app shows about the full dataset or the model's accuracy
+comes from `results/` (written by `scripts/evaluate.py` on all 12,316 rows),
+so a deployment that only ships the 1,200-row sample still shows the real
+figures. The sample is used only to load example accidents.
+"""
+
+import json
 import os
 import sys
 from pathlib import Path
@@ -7,29 +14,29 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
 
-from traffic_accident_severity import config, data, interpretability, model  # noqa: E402
+import joblib  # noqa: E402
+
+from traffic_accident_severity import config, data, vi  # noqa: E402
+
+RESULTS = ROOT / "results"
+SEVERE_COLOUR = "#d1495b"
+SAFE_COLOUR = "#2b59c3"
+GREY = "#8d99ae"
 
 
 def _configure_kaggle_credentials() -> None:
-    """Wire Kaggle API credentials from Streamlit secrets into the
-    environment variables the `kaggle` package reads, so a deployment
-    without a pre-baked Docker image (e.g. Streamlit Community Cloud)
-    can fetch the dataset automatically on first load — see
-    `data._download_from_kaggle`. A no-op if real environment variables
-    are already set (e.g. running locally) or no `[kaggle]` secret is
-    configured (falls back to `~/.kaggle/kaggle.json` if present, or to
-    the manual-download error message if not).
-    """
+    """Optional: wire Kaggle credentials from Streamlit secrets so a
+    deployment can use the full dataset (USE_FULL_KAGGLE_DATA). Without
+    them the bundled sample is used, which is all the app needs."""
     try:
         if st.secrets.get("USE_FULL_KAGGLE_DATA"):
             os.environ["USE_FULL_KAGGLE_DATA"] = "true"
     except Exception:
         pass
-    if os.environ.get("KAGGLE_API_TOKEN") or (
-        os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY")
-    ):
+    if os.environ.get("KAGGLE_API_TOKEN") or (os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY")):
         return
     try:
         token = st.secrets.get("KAGGLE_API_TOKEN")
@@ -49,8 +56,10 @@ _configure_kaggle_credentials()
 
 
 @st.cache_resource
-def get_pipeline():
-    return model.load_pipeline()
+def get_model():
+    if not config.MODEL_PATH.exists():
+        raise FileNotFoundError(f"Chưa có mô hình ({config.MODEL_PATH}). Hãy chạy: python scripts/train.py")
+    return joblib.load(config.MODEL_PATH)
 
 
 @st.cache_data
@@ -59,20 +68,45 @@ def get_accidents_df() -> pd.DataFrame:
 
 
 @st.cache_data
+def get_result(name: str) -> pd.DataFrame:
+    return pd.read_csv(RESULTS / name)
+
+
+@st.cache_data
+def get_json(name: str) -> dict:
+    return json.loads((RESULTS / name).read_text(encoding="utf-8"))
+
+
+@st.cache_data
 def get_default_row() -> dict:
-    """Most-frequent value per raw feature column — the "average"
-    accident record a Predict-page reset button falls back to.
-    """
+    """The most common value of every column: a "typical" accident."""
     df = get_accidents_df()
     return {col: df[col].mode(dropna=True).iloc[0] for col in config.RAW_FEATURE_COLS}
 
 
-@st.cache_data(show_spinner="Computing SHAP values (first load only)...")
-def get_shap_explanation(sample_size: int = 500):
-    pipeline = get_pipeline()
-    df = get_accidents_df()
-    X, _ = data.split_features_target(df)
-    explanation, X_transformed = interpretability.compute_shap_values(
-        pipeline, X, max_samples=sample_size
-    )
-    return explanation, X_transformed
+def options(col: str) -> list:
+    """Every value a column can take (from the model's own training data summary)."""
+    return get_json("data_facts.json")["values"][col]
+
+
+def pct(x: float, digits: int = 0) -> str:
+    return f"{100 * x:.{digits}f}%".replace(".", ",")
+
+
+def num(x: float, digits: int = 0) -> str:
+    """Vietnamese number format: 12.316 and 0,61."""
+    s = f"{x:,.{digits}f}"
+    return s.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
+def glossary(term: str, text: str) -> None:
+    with st.expander(f"📖 {term} là gì?"):
+        st.markdown(text)
+
+
+def source_note() -> None:
+    st.caption("Dữ liệu: hồ sơ tai nạn giao thông của cảnh sát Addis Ababa (Ethiopia), 2017–2020, "
+               "12.316 bản ghi. Mô hình và phân tích: dự án này.")
+
+
+__all__ = ["config", "vi"]

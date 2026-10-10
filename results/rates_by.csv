@@ -1,0 +1,122 @@
+column,value,severe_rate,n
+Light_conditions,Darkness - lights lit,0.16159464394400486,3286
+Light_conditions,Darkness - lights unlit,0.175,40
+Light_conditions,Darkness - no lighting,0.28125,192
+Light_conditions,Daylight,0.1487838145032962,8798
+Number_of_vehicles_involved,1,0.281563126252505,1996
+Number_of_vehicles_involved,2,0.12793764988009593,8340
+Number_of_vehicles_involved,3,0.14094387755102042,1568
+Number_of_vehicles_involved,4,0.10743801652892562,363
+Number_of_vehicles_involved,6,0.2857142857142857,42
+Number_of_vehicles_involved,7,0.0,7
+Age_band_of_driver,18-30,0.15593537813158512,4271
+Age_band_of_driver,31-50,0.14558355762172742,4087
+Age_band_of_driver,Over 51,0.17728706624605678,1585
+Age_band_of_driver,Under 18,0.2193939393939394,825
+Age_band_of_driver,Unknown,0.11498708010335917,1548
+Type_of_collision,Collision with animals,0.1695906432748538,171
+Type_of_collision,Collision with pedestrians,0.18191964285714285,896
+Type_of_collision,Collision with roadside objects,0.16573348264277715,1786
+Type_of_collision,Collision with roadside-parked vehicles,0.09259259259259259,54
+Type_of_collision,Fall from vehicles,0.11764705882352941,34
+Type_of_collision,Other,0.11538461538461539,26
+Type_of_collision,Rollover,0.14609571788413098,397
+Type_of_collision,Unknown,0.07142857142857142,14
+Type_of_collision,Vehicle with vehicle collision,0.1489628447686346,8774
+Type_of_collision,With Train,0.2222222222222222,9
+Types_of_Junction,Crossing,0.11805236564079008,2177
+Types_of_Junction,No junction,0.16992442011988532,3837
+Types_of_Junction,O Shape,0.16463414634146342,164
+Types_of_Junction,Other,0.19101123595505617,445
+Types_of_Junction,T Shape,0.11666666666666667,60
+Types_of_Junction,Unknown,0.14659685863874344,191
+Types_of_Junction,X Shape,0.0,12
+Types_of_Junction,Y Shape,0.1510015408320493,4543
+Weather_conditions,Cloudy,0.064,125
+Weather_conditions,Fog or mist,0.1,10
+Weather_conditions,Normal,0.15989267614031602,10063
+Weather_conditions,Other,0.0945945945945946,296
+Weather_conditions,Raining,0.13598797896318557,1331
+Weather_conditions,Raining and Windy,0.05,40
+Weather_conditions,Snow,0.08196721311475409,61
+Weather_conditions,Unknown,0.17465753424657535,292
+Weather_conditions,Windy,0.16326530612244897,98
+Cause_of_accident,Changing lane to the left,0.15071283095723015,1473
+Cause_of_accident,Changing lane to the right,0.15652654867256638,1808
+Cause_of_accident,Driving at high speed,0.1896551724137931,174
+Cause_of_accident,Driving carelessly,0.16476462196861627,1402
+Cause_of_accident,Driving to the left,0.2007042253521127,284
+Cause_of_accident,Driving under the influence of drugs,0.15,340
+Cause_of_accident,Drunk driving,0.1111111111111111,27
+Cause_of_accident,Getting off the vehicle improperly,0.16243654822335024,197
+Cause_of_accident,Improper parking,0.12,25
+Cause_of_accident,Moving Backward,0.16534740545294635,1137
+Cause_of_accident,No distancing,0.14273088820150243,2263
+Cause_of_accident,No priority to pedestrian,0.13869625520110956,721
+Cause_of_accident,No priority to vehicle,0.13421706710853357,1207
+Cause_of_accident,Other,0.15570175438596492,456
+Cause_of_accident,Overloading,0.2033898305084746,59
+Cause_of_accident,Overspeed,0.26229508196721313,61
+Cause_of_accident,Overtaking,0.18372093023255814,430
+Cause_of_accident,Overturning,0.16778523489932887,149
+Cause_of_accident,Turnover,0.10256410256410256,78
+Cause_of_accident,Unknown,0.08,25
+Day_of_week,Friday,0.16119549240568348,2041
+Day_of_week,Monday,0.12849494348602022,1681
+Day_of_week,Saturday,0.16926770708283315,1666
+Day_of_week,Sunday,0.15337423312883436,1467
+Day_of_week,Thursday,0.15883306320907617,1851
+Day_of_week,Tuesday,0.15480225988700566,1770
+Day_of_week,Wednesday,0.15271739130434783,1840
+Driving_experience,1-2yr,0.1417995444191344,1756
+Driving_experience,2-5yr,0.16341370072713357,2613
+Driving_experience,5-10yr,0.14956883734760631,3363
+Driving_experience,Above 10yr,0.15561450044208666,2262
+Driving_experience,Below 1yr,0.15946348733233978,1342
+Driving_experience,No Licence,0.11016949152542373,118
+Driving_experience,unknown,0.21212121212121213,33
+Type_of_vehicle,Automobile,0.15975039001560062,3205
+Type_of_vehicle,Bajaj,0.10344827586206896,29
+Type_of_vehicle,Bicycle,0.047619047619047616,21
+Type_of_vehicle,Long lorry,0.185378590078329,383
+Type_of_vehicle,Lorry (11?40Q),0.19593345656192238,541
+Type_of_vehicle,Lorry (41?100Q),0.13998170173833485,2186
+Type_of_vehicle,Motorcycle,0.1807909604519774,177
+Type_of_vehicle,Other,0.12748344370860928,1208
+Type_of_vehicle,Pick up upto 10Q,0.1812577065351418,811
+Type_of_vehicle,Public (12 seats),0.14627285513361463,711
+Type_of_vehicle,Public (13?45 seats),0.17857142857142858,532
+Type_of_vehicle,Public (> 45 seats),0.14108910891089108,404
+Type_of_vehicle,Ridden horse,0.14473684210526316,76
+Type_of_vehicle,Special vehicle,0.21428571428571427,84
+Type_of_vehicle,Stationwagen,0.15574963609898107,687
+Type_of_vehicle,Taxi,0.15849056603773584,265
+Type_of_vehicle,Turbo,0.17391304347826086,46
+Road_surface_conditions,Dry,0.1555674518201285,9340
+Road_surface_conditions,Flood over 3cm. deep,0.0,2
+Road_surface_conditions,Snow,0.05714285714285714,70
+Road_surface_conditions,Wet or damp,0.15289256198347106,2904
+hour,0,0.2087378640776699,206
+hour,1,0.15671641791044777,134
+hour,2,0.16666666666666666,84
+hour,3,0.3333333333333333,84
+hour,4,0.10989010989010989,91
+hour,5,0.2631578947368421,76
+hour,6,0.16822429906542055,214
+hour,7,0.14661654135338345,532
+hour,8,0.13285024154589373,828
+hour,9,0.15026833631484796,559
+hour,10,0.104,500
+hour,11,0.15257048092868988,603
+hour,12,0.1345875542691751,691
+hour,13,0.1489637305699482,772
+hour,14,0.13928012519561817,639
+hour,15,0.17162471395881007,874
+hour,16,0.13789359391965256,921
+hour,17,0.13192182410423453,1228
+hour,18,0.15481171548117154,956
+hour,19,0.153954802259887,708
+hour,20,0.20033112582781457,604
+hour,21,0.1546134663341646,401
+hour,22,0.208955223880597,402
+hour,23,0.2535885167464115,209
