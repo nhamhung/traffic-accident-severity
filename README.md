@@ -298,7 +298,7 @@ real data.
 
 The Streamlit app starts immediately from a bundled 1,200-row stratified sample sourced from Kaggle. Set `USE_FULL_KAGGLE_DATA=true` to fetch and use the complete dataset through the Kaggle API; configure either `KAGGLE_API_TOKEN` or a `[kaggle]` secrets section containing username and key.
 
-- Repository: <https://github.com/nhamhhung/traffic-accident-severity>
+- Repository: <https://github.com/nhamhung/traffic-accident-severity>
 - Report: <https://nhamhung.github.io/traffic-accident-severity/>
 - Streamlit: <https://traffic-accident-severity.streamlit.app>
 - Fork setup: [docs/SETUP_AND_DEPLOYMENT.md](docs/SETUP_AND_DEPLOYMENT.md)
