@@ -18,7 +18,7 @@ pages = [
     st.Page(predict.render, title="Dự đoán", icon="🎯", url_path="predict", default=True),
     st.Page(overview.render, title="Dữ liệu nói gì?", icon="📊", url_path="overview"),
     st.Page(feature_engineering.render, title="Chuẩn bị dữ liệu", icon="🔧", url_path="feature-engineering"),
-    st.Page(model_insights.render, title="Mô hình giỏi đến đâu?", icon="🧠", url_path="model-insights"),
+    st.Page(model_insights.render, title="Ứng dụng vào quản lý", icon="🚦", url_path="model-insights"),
 ]
 
 st.navigation(pages).run()

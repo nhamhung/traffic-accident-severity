@@ -1,6 +1,6 @@
 ---
-title: "Dự đoán mức độ nghiêm trọng của tai nạn giao thông"
-subtitle: "Máy học có thể nhận ra một vụ tai nạn nguy hiểm từ hoàn cảnh của nó không? Một nghiên cứu trên 12.316 vụ tai nạn có thật"
+title: "Quản lý rủi ro tai nạn giao thông tại Việt Nam"
+subtitle: "Một bài trình bày giáo dục về dữ liệu, dự đoán và quyết định an toàn giao thông"
 author: "Your Name"
 date: today
 lang: vi
@@ -48,7 +48,6 @@ RESULTS = config.PROJECT_ROOT / "results"
 facts = json.loads((RESULTS / "data_facts.json").read_text(encoding="utf-8"))
 summary = json.loads((RESULTS / "summary.json").read_text())
 rates = pd.read_csv(RESULTS / "rates_by.csv")
-comparison = pd.read_csv(RESULTS / "model_comparison.csv")
 leak = pd.read_csv(RESULTS / "leak_check.csv").set_index("folds")
 tradeoff = pd.read_csv(RESULTS / "threshold_tradeoff.csv")
 importance = pd.read_csv(RESULTS / "feature_importance.csv")
@@ -98,9 +97,6 @@ def rate_bars(col, order=None, title=None, horizontal=True, min_n=30):
     plt.show()
 
 
-new = comparison[comparison["is_final"]].iloc[0]
-old = comparison[comparison["model"] == "old_random_forest"].iloc[0]
-logistic = comparison[comparison["model"] == "logistic"].iloc[0]
 ```
 
 ::: {.callout-tip}
@@ -120,9 +116,8 @@ Markdown(f"""
 - **Phát hiện rõ nhất:** ban đêm **không có đèn đường**, tỉ lệ vụ nghiêm trọng là
   **{pct(rate('Light_conditions', 'Darkness - no lighting'))}**, gần **gấp đôi** ban ngày
   ({pct(rate('Light_conditions', 'Daylight'))}). Ban đêm *có* đèn đường thì gần an toàn như ban ngày.
-- **Mô hình:** mô hình mới đạt điểm Macro-F1 **{num(new['f1_tuned'], 3)}** (mô hình cũ: {num(old['f1_tuned'], 3)})
-  khi kiểm tra trên những vụ tai nạn nó chưa từng thấy. Nó có ích hơn đoán bừa rõ rệt, nhưng vẫn bỏ sót và báo
-  nhầm khá nhiều, vì nhiều điều quyết định mức độ nghiêm trọng (tốc độ thật, mũ bảo hiểm…) không có trong dữ liệu.
+- **Bài học quản lý:** mô hình giúp minh họa cách sàng lọc rủi ro và chọn mức cảnh báo, nhưng vẫn bỏ sót và báo
+  nhầm. Nó không thay thế dữ liệu Việt Nam, khảo sát hiện trường hay quyết định của chuyên gia.
 """)
 ```
 
@@ -280,9 +275,9 @@ trong khi nếu là các vụ khác nhau thì chỉ khoảng {pct(facts['multi_r
 **chưa từng thấy**, giống như đề thi phải khác bài tập. Nếu một dòng của vụ tai nạn nằm trong phần "học" còn dòng
 kia nằm trong phần "thi", mô hình chỉ cần **nhớ** chứ không cần **hiểu**: bị **lộ đề**.
 
-Khi chấm lại mô hình cũ theo cách công bằng (giữ nguyên từng vụ), điểm PR-AUC của nó giảm từ
-{num(leak.loc['random', 'pr_auc'], 3)} xuống **{num(leak.loc['grouped', 'pr_auc'], 3)}**. Mức giảm không lớn,
-nhưng cho thấy điểm cũ hơi "đẹp" hơn thực tế. Mọi con số trong báo cáo này đều dùng cách chấm công bằng.
+Khi chia ngẫu nhiên, điểm PR-AUC là {num(leak.loc['random', 'pr_auc'], 3)}; khi giữ nguyên từng vụ, điểm là
+**{num(leak.loc['grouped', 'pr_auc'], 3)}**. Sự khác biệt cho thấy vì sao một bài kiểm tra công bằng phải ngăn
+cùng một vụ xuất hiện ở cả phần học và phần thi. Mọi con số trong báo cáo này đều dùng cách chia theo vụ.
 """)
 ```
 
@@ -317,41 +312,17 @@ nghiêm trọng nào. Vì vậy dự án dùng hai điểm số khác:
 """)
 ```
 
-### Các mô hình được thử
+### Mô hình đóng vai trò gì trong quản lý?
 
-```{python}
-comp = comparison.sort_values("f1_tuned")
-fig, ax = plt.subplots(figsize=(7.5, 0.55 * len(comp) + 0.8))
-ax.barh(comp["name_vi"], comp["f1_tuned"], color=[RED if f else GREY for f in comp["is_final"]])
-for i, v in enumerate(comp["f1_tuned"]):
-    ax.text(v + 0.002, i, num(v, 3), va="center")
-ax.axvline(0.458, ls=":", color="gray")
-ax.text(0.46, len(comp) - 0.5, "mô hình lười biếng", color="gray", fontsize=8)
-ax.set_xlim(0.44, comp["f1_tuned"].max() + 0.03)
-ax.set_xlabel("Macro-F1 (càng cao càng tốt)")
-plt.tight_layout()
-plt.show()
-```
+Mô hình kết hợp nhiều cây quyết định để ước tính **khả năng** một vụ tai nạn sẽ nghiêm trọng từ hoàn cảnh được
+ghi nhận. Trong bài trình bày này, kết quả đó có ba vai trò giáo dục:
 
-```{python}
-table = comparison.sort_values("f1_tuned", ascending=False)[["name_vi", "f1_tuned", "pr_auc", "roc_auc"]].copy()
-table.columns = ["Mô hình", "Macro-F1", "PR-AUC", "ROC-AUC"]
-table.round(3)
-```
+1. **Sàng lọc:** đưa những tình huống có nguy cơ cao lên trước để con người xem xét.
+2. **Đặt câu hỏi:** chỉ ra những yếu tố cần khảo sát kỹ hơn, như ánh sáng, loại va chạm và số xe liên quan.
+3. **Thảo luận chính sách:** cho thấy mỗi mức cảnh báo tạo ra số vụ bỏ sót và báo nhầm khác nhau.
 
-```{python}
-Markdown(f"""
-- **Hồi quy logistic** là mô hình đơn giản nhất: nó cộng điểm cho từng yếu tố một cách riêng lẻ. Nó kém nhất
-  (Macro-F1 {num(logistic['f1_tuned'], 3)}), cho thấy mức độ nghiêm trọng phụ thuộc vào **sự kết hợp** của nhiều
-  yếu tố (ví dụ: *ban đêm* **và** *không đèn* **và** *tông người đi bộ*), không phải từng yếu tố riêng lẻ.
-- **Rừng ngẫu nhiên** gồm hàng trăm "cây quyết định", mỗi cây là một chuỗi câu hỏi có/không (*Trời tối không? Có
-  đèn không? Mấy xe?*), rồi các cây **bỏ phiếu**. Đây là mô hình cũ của dự án ({num(old['f1_tuned'], 3)}).
-  Tinh chỉnh thêm (cho cây sâu hơn, mỗi lần hỏi xem nhiều thông tin hơn) giúp nó tốt lên.
-- **CatBoost** (mô hình mới, {num(new['f1_tuned'], 3)}) cũng dùng nhiều cây, nhưng các cây được xây **lần lượt**,
-  cây sau sửa lỗi của cây trước. Điểm mạnh của nó là **hiểu trực tiếp các giá trị dạng chữ** như "ban đêm, không
-  đèn", trong khi các mô hình khác phải đổi chúng thành hàng trăm cột 0/1.
-""")
-```
+Mô hình không chứng minh nguyên nhân, không tự chọn biện pháp can thiệp và không đủ cơ sở để vận hành tại Việt
+Nam nếu chưa được kiểm tra bằng dữ liệu địa phương.
 
 ### Khi nào thì bật cảnh báo?
 
@@ -463,15 +434,16 @@ Markdown(f"""
 
 ```{python}
 Markdown(f"""
-Dự án cho thấy máy học **có thể** nhận ra những vụ tai nạn nguy hiểm tốt hơn đoán bừa rõ rệt (PR-AUC
-{num(new['pr_auc'], 2)} so với {num(BASE, 2)}), nhưng còn xa mới hoàn hảo. Những bài học quan trọng nhất không
-nằm ở việc chọn mô hình nào, mà ở việc **đặt câu hỏi đúng và kiểm tra trung thực**:
+Dự án cho thấy máy học có thể hỗ trợ **sàng lọc** tình huống giao thông, nhưng kết quả luôn có bỏ sót và báo
+nhầm. Những bài học quan trọng nhất nằm ở việc **đặt câu hỏi đúng, kiểm tra trung thực và giữ con người trong
+quy trình quyết định**:
 
 1. **Không để lộ đáp án cho mô hình:** chỉ dùng thông tin có trước tai nạn.
 2. **Chấm điểm công bằng:** một vụ tai nạn không được nằm cả trong bài học lẫn đề thi.
 3. **Đừng tin "độ chính xác" khi dữ liệu lệch:** một mô hình lười biếng cũng đúng {pct(1 - BASE)}.
 4. **Luôn vẽ biểu đồ:** hệ số tương quan bỏ qua những quy luật hình chữ U.
 5. **Kiểm tra chiều ảnh hưởng**, không chỉ độ lớn.
+6. **Thử nghiệm bằng dữ liệu Việt Nam** trước khi cân nhắc bất kỳ ứng dụng thực tế nào.
 
 Và phát hiện có ích nhất lại không cần đến máy học: **thiếu đèn đường gần như nhân đôi nguy cơ tai nạn nghiêm
 trọng**.

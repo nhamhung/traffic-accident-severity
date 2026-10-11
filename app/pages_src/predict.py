@@ -190,7 +190,7 @@ def render() -> None:
                 f"Chỉ khoảng **{shared.pct(base_rate)}** số vụ tai nạn là nghiêm trọng, nên hiếm khi mô hình "
                 f"chắc chắn trên 50%. Nếu chờ đến 50% mới cảnh báo, nó sẽ bỏ sót gần hết các vụ nghiêm trọng. "
                 f"Mức {shared.pct(threshold)} được chọn để cân bằng giữa **bắt được nhiều vụ nghiêm trọng** "
-                f"và **không báo động nhầm quá nhiều**. Xem trang *Mô hình giỏi đến đâu?* để hiểu thêm."
+                f"và **không báo động nhầm quá nhiều**. Xem trang *Ứng dụng vào quản lý* để hiểu thêm."
             )
     with right:
         st.markdown("**Vì sao mô hình nghĩ như vậy?**")
