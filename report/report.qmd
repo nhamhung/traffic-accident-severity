@@ -153,7 +153,7 @@ thành các nhóm:
 """)
 ```
 
-### Không "nhìn trộm" đáp án
+### Không để lộ đáp án
 
 Dữ liệu còn có những cột ghi lại **sau** tai nạn: ai bị thương, bị thương nặng đến đâu, có bao nhiêu người thương
 vong. Dự án **không** cho mô hình xem những cột này. Nếu cho mô hình biết "có người bị thương nặng" rồi hỏi "vụ
@@ -467,7 +467,7 @@ Dự án cho thấy máy học **có thể** nhận ra những vụ tai nạn ng
 {num(new['pr_auc'], 2)} so với {num(BASE, 2)}), nhưng còn xa mới hoàn hảo. Những bài học quan trọng nhất không
 nằm ở việc chọn mô hình nào, mà ở việc **đặt câu hỏi đúng và kiểm tra trung thực**:
 
-1. **Không cho mô hình "nhìn trộm" đáp án:** chỉ dùng thông tin có trước tai nạn.
+1. **Không để lộ đáp án cho mô hình:** chỉ dùng thông tin có trước tai nạn.
 2. **Chấm điểm công bằng:** một vụ tai nạn không được nằm cả trong bài học lẫn đề thi.
 3. **Đừng tin "độ chính xác" khi dữ liệu lệch:** một mô hình lười biếng cũng đúng {pct(1 - BASE)}.
 4. **Luôn vẽ biểu đồ:** hệ số tương quan bỏ qua những quy luật hình chữ U.
