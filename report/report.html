@@ -8,7 +8,7 @@
 
 <meta name="author" content="Your Name">
 
-<title>Dự đoán mức độ nghiêm trọng của tai nạn giao thông</title>
+<title>Quản lý rủi ro tai nạn giao thông tại Việt Nam</title>
 <style>
 
 span.smallcaps{font-variant: small-caps;}
@@ -2479,8 +2479,8 @@ background-color: #3a5cad;
 <header id="title-block-header" class="quarto-title-block default toc-left page-columns page-full">
   <div class="quarto-title-banner page-columns page-full">
     <div class="quarto-title column-body">
-      <h1 class="title">Dự đoán mức độ nghiêm trọng của tai nạn giao thông</h1>
-            <p class="subtitle lead">Máy học có thể nhận ra một vụ tai nạn nguy hiểm từ hoàn cảnh của nó không? Một nghiên cứu trên 12.316 vụ tai nạn có thật</p>
+      <h1 class="title">Quản lý rủi ro tai nạn giao thông tại Việt Nam</h1>
+            <p class="subtitle lead">Một bài trình bày giáo dục về dữ liệu, dự đoán và quyết định an toàn giao thông</p>
                       </div>
   </div>
     
@@ -2555,7 +2555,7 @@ background-color: #3a5cad;
 <li><strong>Câu hỏi:</strong> chỉ nhìn vào <em>hoàn cảnh</em> của một vụ tai nạn (trời sáng hay tối, đâm vào gì, người lái bao nhiêu tuổi…), máy tính có đoán được vụ đó có <strong>nghiêm trọng</strong> (có người bị thương nặng hoặc tử vong) hay không?</li>
 <li><strong>Dữ liệu:</strong> 12.316 bản ghi tai nạn có thật ở Addis Ababa (Ethiopia), một thành phố có giao thông hỗn hợp xe máy, ô tô, xe buýt và người đi bộ, khá giống các thành phố Việt Nam.</li>
 <li><strong>Phát hiện rõ nhất:</strong> ban đêm <strong>không có đèn đường</strong>, tỉ lệ vụ nghiêm trọng là <strong>28%</strong>, gần <strong>gấp đôi</strong> ban ngày (15%). Ban đêm <em>có</em> đèn đường thì gần an toàn như ban ngày.</li>
-<li><strong>Mô hình:</strong> mô hình mới đạt điểm Macro-F1 <strong>0,611</strong> (mô hình cũ: 0,586) khi kiểm tra trên những vụ tai nạn nó chưa từng thấy. Nó có ích hơn đoán bừa rõ rệt, nhưng vẫn bỏ sót và báo nhầm khá nhiều, vì nhiều điều quyết định mức độ nghiêm trọng (tốc độ thật, mũ bảo hiểm…) không có trong dữ liệu.</li>
+<li><strong>Bài học quản lý:</strong> mô hình giúp minh họa cách sàng lọc rủi ro và chọn mức cảnh báo, nhưng vẫn bỏ sót và báo nhầm. Nó không thay thế dữ liệu Việt Nam, khảo sát hiện trường hay quyết định của chuyên gia.</li>
 </ul>
 </div>
 </div>
@@ -2685,7 +2685,7 @@ background-color: #3a5cad;
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="12">
 <p>Khi kiểm tra kỹ, dự án phát hiện <strong>3.003 dòng</strong> (24% dữ liệu) có cùng giờ, cùng ngày, cùng nơi, cùng thời tiết, cùng kiểu va chạm với một dòng khác. Đó là <strong>cùng một vụ tai nạn</strong>, được ghi mỗi xe một dòng. Bằng chứng: trong những nhóm này, mức độ nghiêm trọng giống nhau <strong>94%</strong> số lần, trong khi nếu là các vụ khác nhau thì chỉ khoảng 74%.</p>
 <p><strong>Vì sao điều này quan trọng?</strong> Để biết mô hình giỏi thật hay không, ta phải kiểm tra nó trên những vụ tai nạn nó <strong>chưa từng thấy</strong>, giống như đề thi phải khác bài tập. Nếu một dòng của vụ tai nạn nằm trong phần “học” còn dòng kia nằm trong phần “thi”, mô hình chỉ cần <strong>nhớ</strong> chứ không cần <strong>hiểu</strong>: bị <strong>lộ đề</strong>.</p>
-<p>Khi chấm lại mô hình cũ theo cách công bằng (giữ nguyên từng vụ), điểm PR-AUC của nó giảm từ 0,289 xuống <strong>0,275</strong>. Mức giảm không lớn, nhưng cho thấy điểm cũ hơi “đẹp” hơn thực tế. Mọi con số trong báo cáo này đều dùng cách chấm công bằng.</p>
+<p>Khi chia ngẫu nhiên, điểm PR-AUC là 0,289; khi giữ nguyên từng vụ, điểm là <strong>0,275</strong>. Sự khác biệt cho thấy vì sao một bài kiểm tra công bằng phải ngăn cùng một vụ xuất hiện ở cả phần học và phần thi. Mọi con số trong báo cáo này đều dùng cách chia theo vụ.</p>
 </div>
 </div>
 </section>
@@ -2709,8 +2709,8 @@ background-color: #3a5cad;
 </div>
 </div>
 </section>
-<section id="các-mô-hình-được-thử" class="level3" data-number="5.3">
-<h3 data-number="5.3" class="anchored" data-anchor-id="các-mô-hình-được-thử"><span class="header-section-number">5.3</span> Các mô hình được thử</h3>
+<section id="các-mô-hình-được-thử" class="level3" data-number="5.3" style="display:none" aria-hidden="true">
+<h3 data-number="5.3" class="anchored" data-anchor-id="các-mô-hình-được-thử"><span class="header-section-number">5.3</span> Chi tiết thử nghiệm kỹ thuật</h3>
 <div id="14e58c63" class="cell" data-execution_count="14">
 <div class="cell-output cell-output-display">
 <div>
@@ -2738,7 +2738,7 @@ background-color: #3a5cad;
 <tbody>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">4</th>
-<td>CatBoost + rừng ngẫu nhiên (mô hình mới)</td>
+<td>CatBoost + rừng ngẫu nhiên</td>
 <td>0.611</td>
 <td>0.323</td>
 <td>0.698</td>
@@ -2759,7 +2759,7 @@ background-color: #3a5cad;
 </tr>
 <tr class="even">
 <th data-quarto-table-cell-role="th">1</th>
-<td>Rừng ngẫu nhiên (mô hình cũ)</td>
+<td>Rừng ngẫu nhiên cơ sở</td>
 <td>0.586</td>
 <td>0.275</td>
 <td>0.650</td>
@@ -2781,11 +2781,15 @@ background-color: #3a5cad;
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="16">
 <ul>
 <li><strong>Hồi quy logistic</strong> là mô hình đơn giản nhất: nó cộng điểm cho từng yếu tố một cách riêng lẻ. Nó kém nhất (Macro-F1 0,556), cho thấy mức độ nghiêm trọng phụ thuộc vào <strong>sự kết hợp</strong> của nhiều yếu tố (ví dụ: <em>ban đêm</em> <strong>và</strong> <em>không đèn</em> <strong>và</strong> <em>tông người đi bộ</em>), không phải từng yếu tố riêng lẻ.</li>
-<li><strong>Rừng ngẫu nhiên</strong> gồm hàng trăm “cây quyết định”, mỗi cây là một chuỗi câu hỏi có/không (<em>Trời tối không? Có đèn không? Mấy xe?</em>), rồi các cây <strong>bỏ phiếu</strong>. Đây là mô hình cũ của dự án (0,586). Tinh chỉnh thêm (cho cây sâu hơn, mỗi lần hỏi xem nhiều thông tin hơn) giúp nó tốt lên.</li>
-<li><strong>CatBoost</strong> (mô hình mới, 0,611) cũng dùng nhiều cây, nhưng các cây được xây <strong>lần lượt</strong>, cây sau sửa lỗi của cây trước. Điểm mạnh của nó là <strong>hiểu trực tiếp các giá trị dạng chữ</strong> như “ban đêm, không đèn”, trong khi các mô hình khác phải đổi chúng thành hàng trăm cột 0/1.</li>
+<li><strong>Rừng ngẫu nhiên</strong> gồm hàng trăm “cây quyết định”, mỗi cây là một chuỗi câu hỏi có/không, rồi các cây <strong>bỏ phiếu</strong>.</li>
+<li><strong>CatBoost</strong> cũng dùng nhiều cây và có thể xử lý trực tiếp các giá trị dạng chữ như “ban đêm, không đèn”.</li>
 </ul>
 </div>
 </div>
+</section>
+<section id="vai-tro-trong-quan-ly" class="level3" data-number="5.3">
+<h3 data-number="5.3" class="anchored" data-anchor-id="vai-tro-trong-quan-ly"><span class="header-section-number">5.3</span> Mô hình đóng vai trò gì trong quản lý?</h3>
+<p>Mô hình kết hợp nhiều cây quyết định để ước tính <strong>khả năng</strong> một vụ tai nạn sẽ nghiêm trọng. Kết quả giúp sàng lọc tình huống, đặt câu hỏi khảo sát và thảo luận về mức cảnh báo. Mô hình không chứng minh nguyên nhân, không tự chọn biện pháp can thiệp và không đủ cơ sở để vận hành tại Việt Nam nếu chưa được kiểm tra bằng dữ liệu địa phương.</p>
 </section>
 <section id="khi-nào-thì-bật-cảnh-báo" class="level3" data-number="5.4">
 <h3 data-number="5.4" class="anchored" data-anchor-id="khi-nào-thì-bật-cảnh-báo"><span class="header-section-number">5.4</span> Khi nào thì bật cảnh báo?</h3>
@@ -2863,13 +2867,14 @@ background-color: #3a5cad;
 <h2 data-number="9" class="anchored" data-anchor-id="kết-luận"><span class="header-section-number">9</span> Kết luận</h2>
 <div id="92c2ea12" class="cell" data-execution_count="22">
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="22">
-<p>Dự án cho thấy máy học <strong>có thể</strong> nhận ra những vụ tai nạn nguy hiểm tốt hơn đoán bừa rõ rệt (PR-AUC 0,32 so với 0,15), nhưng còn xa mới hoàn hảo. Những bài học quan trọng nhất không nằm ở việc chọn mô hình nào, mà ở việc <strong>đặt câu hỏi đúng và kiểm tra trung thực</strong>:</p>
+<p>Dự án cho thấy máy học có thể hỗ trợ <strong>sàng lọc</strong> tình huống giao thông, nhưng kết quả luôn có bỏ sót và báo nhầm. Những bài học quan trọng nhất nằm ở việc <strong>đặt câu hỏi đúng, kiểm tra trung thực và giữ con người trong quy trình quyết định</strong>:</p>
 <ol type="1">
 <li><strong>Không để lộ đáp án cho mô hình:</strong> chỉ dùng thông tin có trước tai nạn.</li>
 <li><strong>Chấm điểm công bằng:</strong> một vụ tai nạn không được nằm cả trong bài học lẫn đề thi.</li>
 <li><strong>Đừng tin “độ chính xác” khi dữ liệu lệch:</strong> một mô hình lười biếng cũng đúng 85%.</li>
 <li><strong>Luôn vẽ biểu đồ:</strong> hệ số tương quan bỏ qua những quy luật hình chữ U.</li>
 <li><strong>Kiểm tra chiều ảnh hưởng</strong>, không chỉ độ lớn.</li>
+<li><strong>Thử nghiệm bằng dữ liệu Việt Nam</strong> trước khi cân nhắc bất kỳ ứng dụng thực tế nào.</li>
 </ol>
 <p>Và phát hiện có ích nhất lại không cần đến máy học: <strong>thiếu đèn đường gần như nhân đôi nguy cơ tai nạn nghiêm trọng</strong>.</p>
 </div>

@@ -43,12 +43,12 @@ def render() -> None:
     df = pd.DataFrame({"Cách chia đề thi": ["Chia ngẫu nhiên (bị lộ đề)", "Giữ nguyên từng vụ (công bằng)"],
                        "Điểm": [leak.loc["random", "pr_auc"], leak.loc["grouped", "pr_auc"]]})
     fig = px.bar(df, x="Điểm", y="Cách chia đề thi", orientation="h", text=[shared.num(v, 3) for v in df["Điểm"]],
-                 labels={"Điểm": "Điểm PR-AUC của mô hình cũ (càng cao càng giỏi)"})
+                 labels={"Điểm": "Điểm PR-AUC khi kiểm tra (càng cao càng tốt)"})
     fig.update_traces(marker_color=[shared.GREY, shared.SAFE_COLOUR])
     fig.update_layout(height=220, margin=dict(t=10))
     st.plotly_chart(fig, width="stretch")
-    st.caption("Khi bị lộ đề, mô hình cũ trông giỏi hơn thực tế một chút. Mọi con số trong ứng dụng này đều "
-               "dùng cách chia công bằng.")
+    st.caption("Khi bị lộ đề, kết quả kiểm tra trông tốt hơn thực tế. Mọi con số trong ứng dụng này đều dùng "
+               "cách chia công bằng: các dòng của cùng một vụ luôn ở cùng một phía.")
 
     st.subheader("3. Giờ là một vòng tròn")
     st.markdown(
