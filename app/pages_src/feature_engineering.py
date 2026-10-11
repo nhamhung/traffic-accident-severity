@@ -15,7 +15,7 @@ def render() -> None:
     facts = shared.get_json("data_facts.json")
     leak = shared.get_result("leak_check.csv").set_index("folds")
 
-    st.subheader("1. Không \"nhìn trộm\" kết quả")
+    st.subheader("1. Không để lộ kết quả")
     st.markdown(
         "Dữ liệu có hai loại thông tin:\n\n"
         "- **Trước hoặc lúc va chạm:** người lái, loại xe, con đường, thời tiết, kiểu va chạm… ✅ Mô hình được dùng.\n"

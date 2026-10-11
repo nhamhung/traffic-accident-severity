@@ -2579,8 +2579,8 @@ background-color: #3a5cad;
 </ul>
 </div>
 </div>
-<section id="không-nhìn-trộm-đáp-án" class="level3" data-number="2.1">
-<h3 data-number="2.1" class="anchored" data-anchor-id="không-nhìn-trộm-đáp-án"><span class="header-section-number">2.1</span> Không “nhìn trộm” đáp án</h3>
+<section id="không-để-lộ-đáp-án" class="level3" data-number="2.1">
+<h3 data-number="2.1" class="anchored" data-anchor-id="không-để-lộ-đáp-án"><span class="header-section-number">2.1</span> Không để lộ đáp án</h3>
 <p>Dữ liệu còn có những cột ghi lại <strong>sau</strong> tai nạn: ai bị thương, bị thương nặng đến đâu, có bao nhiêu người thương vong. Dự án <strong>không</strong> cho mô hình xem những cột này. Nếu cho mô hình biết “có người bị thương nặng” rồi hỏi “vụ này có nghiêm trọng không”, nó sẽ trả lời rất giỏi nhưng <strong>vô dụng</strong>, giống như được xem đáp án trước khi làm bài. Một hệ thống phòng tránh tai nạn chỉ có thể dùng thông tin có <strong>trước</strong> khi tai nạn xảy ra.</p>
 </section>
 <section id="phần-lớn-tai-nạn-chỉ-gây-thương-tích-nhẹ" class="level3" data-number="2.2">
@@ -2865,7 +2865,7 @@ background-color: #3a5cad;
 <div class="cell-output cell-output-display cell-output-markdown" data-execution_count="22">
 <p>Dự án cho thấy máy học <strong>có thể</strong> nhận ra những vụ tai nạn nguy hiểm tốt hơn đoán bừa rõ rệt (PR-AUC 0,32 so với 0,15), nhưng còn xa mới hoàn hảo. Những bài học quan trọng nhất không nằm ở việc chọn mô hình nào, mà ở việc <strong>đặt câu hỏi đúng và kiểm tra trung thực</strong>:</p>
 <ol type="1">
-<li><strong>Không cho mô hình “nhìn trộm” đáp án:</strong> chỉ dùng thông tin có trước tai nạn.</li>
+<li><strong>Không để lộ đáp án cho mô hình:</strong> chỉ dùng thông tin có trước tai nạn.</li>
 <li><strong>Chấm điểm công bằng:</strong> một vụ tai nạn không được nằm cả trong bài học lẫn đề thi.</li>
 <li><strong>Đừng tin “độ chính xác” khi dữ liệu lệch:</strong> một mô hình lười biếng cũng đúng 85%.</li>
 <li><strong>Luôn vẽ biểu đồ:</strong> hệ số tương quan bỏ qua những quy luật hình chữ U.</li>
