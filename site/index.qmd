@@ -10,9 +10,9 @@ This GitHub Pages site contains static documentation. The interactive Python app
 
 ## Use the project
 
-- [Source repository](https://github.com/nhamhhung/traffic-accident-severity)
+- [Source repository](https://github.com/nhamhung/traffic-accident-severity)
 - [Interactive Streamlit app](https://traffic-accident-severity.streamlit.app)
-- [Clone, fork, and deployment guide](https://github.com/nhamhhung/traffic-accident-severity/blob/main/docs/SETUP_AND_DEPLOYMENT.md)
+- [Clone, fork, and deployment guide](https://github.com/nhamhung/traffic-accident-severity/blob/main/docs/SETUP_AND_DEPLOYMENT.md)
 
 ## Reproduce it
 
