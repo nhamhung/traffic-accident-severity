@@ -68,7 +68,7 @@ def render() -> None:
         "hơn. Cách hiểu đơn giản: vấn đề đáng kiểm tra có thể không phải chỉ là trời tối, mà là **khả năng quan sát**."
     )
 
-    st.subheader("2. Ban đêm và rạng sáng cần được chú ý hơn")
+    st.subheader("2. Thời gian: từ 20 giờ đến 5 giờ nổi bật hơn ban ngày")
     hours = rates[rates["column"] == "hour"].copy()
     hours["hour"] = hours["value"].astype(float).astype(int)
     figure = px.line(
@@ -83,9 +83,23 @@ def render() -> None:
     )
     figure.update_layout(yaxis_tickformat=".0%", height=320, margin=dict(t=10))
     st.plotly_chart(figure, width="stretch")
+
+    late_hours = (hours["hour"] >= 20) | (hours["hour"] <= 5)
+    daytime = hours["hour"].between(6, 17)
+
+    def weighted_rate(mask: pd.Series) -> float:
+        selected = hours[mask]
+        return float((selected["n"] * selected["severe_rate"]).sum() / selected["n"].sum())
+
+    late_rate = weighted_rate(late_hours)
+    daytime_rate = weighted_rate(daytime)
+    comparison = st.columns(2)
+    comparison[0].metric("🌙 Từ 20h đến 5h", shared.pct(late_rate))
+    comparison[1].metric("☀️ Từ 6h đến 17h", shared.pct(daytime_rate))
     st.markdown(
-        "Đường biểu diễn tăng lên ở một số giờ ban đêm và rạng sáng. Kết quả này kể cùng một câu chuyện với biểu đồ "
-        "ánh sáng ở trên: thời điểm và tầm nhìn có thể kết hợp với nhau làm rủi ro thay đổi."
+        f"Khi gộp thành hai khoảng dễ so sánh, tỉ lệ nghiêm trọng từ **20h đến 5h** cao khoảng "
+        f"**{shared.num(late_rate / daytime_rate, 1)} lần** so với từ 6h đến 17h. Kết quả này kể cùng một câu chuyện với biểu đồ "
+        "ánh sáng ở trên: thời điểm, tầm nhìn và những điều kiện đi kèm có thể cùng làm rủi ro thay đổi."
     )
 
     st.subheader("3. Các nhóm tuổi không có mức rủi ro giống nhau")
