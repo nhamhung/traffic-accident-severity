@@ -221,13 +221,11 @@ comparison models in `evaluate.py`.
 
 ## Run the app
 
-A 4-page educational presentation in Vietnamese: **Dự đoán** (load a real accident or start
-from a typical one, change the conditions, see the probability, the alert
-and which factors pushed it up or down), **Dữ liệu nói gì?** (findings
-straight from the data), **Chuẩn bị dữ liệu** (no peeking at outcomes, one
-accident = many rows, missing values) and **Ứng dụng vào quản lý** (a
-threshold exercise, factors to investigate, and a responsible path toward
-a locally validated Vietnamese pilot).
+A 4-page educational presentation in Vietnamese: **Vì sao có dự án này?**
+(the problem and purpose), **Thử dự đoán** (compare real non-serious and
+serious cases, then change their conditions), **Phát hiện thú vị** (the
+three clearest, actionable findings) and **Ứng dụng vào quản lý** (practical
+actions and a responsible path toward a locally validated Vietnamese pilot).
 
 ```bash
 streamlit run app/streamlit_app.py

@@ -105,8 +105,8 @@ def glossary(term: str, text: str) -> None:
 
 
 def source_note() -> None:
-    st.caption("Dữ liệu: hồ sơ tai nạn giao thông của cảnh sát Addis Ababa (Ethiopia), 2017–2020, "
-               "12.316 bản ghi. Mô hình và phân tích: dự án này.")
+    st.caption("Nguồn minh họa: hồ sơ tai nạn giao thông được công bố công khai tại Addis Ababa (Ethiopia), "
+               "giai đoạn 2017–2020. Phân tích và diễn giải: dự án này.")
 
 
 __all__ = ["config", "vi"]
