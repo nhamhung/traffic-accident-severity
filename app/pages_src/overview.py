@@ -1,4 +1,4 @@
-"""Ba phát hiện trực quan và có ý nghĩa quản lý nhất."""
+"""Bốn phát hiện trực quan và có ý nghĩa quản lý nhất."""
 
 import pandas as pd
 import plotly.express as px
@@ -50,7 +50,7 @@ def _rate_chart(rates: pd.DataFrame, column: str, base_rate: float, order: list 
 def render() -> None:
     st.title("🔎 Những phát hiện thú vị")
     st.markdown(
-        "Sau khi so sánh các nhóm tai nạn, em chọn ra ba kết quả dễ giải thích nhất cho lớp. "
+        "Sau khi so sánh các nhóm tai nạn, em chọn ra bốn kết quả dễ giải thích nhất cho lớp. "
         "Chúng không chỉ là con số: mỗi kết quả đều gợi ra một câu hỏi thực tế mà người quản lý có thể kiểm tra."
     )
     st.info(
@@ -116,6 +116,48 @@ def render() -> None:
     st.markdown(
         "Trong dữ liệu này, nhóm rất trẻ và nhóm lớn tuổi có tỉ lệ nghiêm trọng cao hơn các nhóm ở giữa. Biểu đồ chưa "
         "cho biết *vì sao*, nhưng giúp chúng ta đặt câu hỏi tiếp theo về kinh nghiệm lái xe, khả năng phản ứng và hình thức hỗ trợ phù hợp."
+    )
+
+    st.subheader("4. Những nguyên nhân liên quan đến tốc độ cần được chú ý")
+    causes = rates[rates["column"] == "Cause_of_accident"].copy()
+    speed_causes = causes["value"].isin(["Overspeed", "Driving at high speed"])
+
+    def cause_rate(mask: pd.Series) -> float:
+        selected = causes[mask]
+        return float((selected["n"] * selected["severe_rate"]).sum() / selected["n"].sum())
+
+    cause_comparison = pd.DataFrame(
+        {
+            "Nhóm nguyên nhân": ["Liên quan đến tốc độ", "Các nguyên nhân khác"],
+            "Tỉ lệ nghiêm trọng": [cause_rate(speed_causes), cause_rate(~speed_causes)],
+        }
+    )
+    cause_figure = px.bar(
+        cause_comparison,
+        x="Nhóm nguyên nhân",
+        y="Tỉ lệ nghiêm trọng",
+        text=[shared.pct(value) for value in cause_comparison["Tỉ lệ nghiêm trọng"]],
+        color="Nhóm nguyên nhân",
+        color_discrete_map={
+            "Liên quan đến tốc độ": shared.SEVERE_COLOUR,
+            "Các nguyên nhân khác": shared.SAFE_COLOUR,
+        },
+    )
+    cause_figure.add_hline(
+        base_rate, line_dash="dash", line_color="gray", annotation_text=f"Mức trung bình {shared.pct(base_rate)}"
+    )
+    cause_figure.update_layout(
+        showlegend=False,
+        yaxis_tickformat=".0%",
+        height=320,
+        margin=dict(t=20, b=10),
+        xaxis_title=None,
+    )
+    st.plotly_chart(cause_figure, width="stretch")
+    st.markdown(
+        "Khi gộp các mô tả có liên quan trực tiếp đến tốc độ, nhóm này có tỉ lệ tai nạn nghiêm trọng cao hơn "
+        "các nguyên nhân còn lại. Đây là một gợi ý dễ hiểu cho việc kiểm soát tốc độ tại những nơi và thời điểm rủi ro, "
+        "nhưng vẫn cần thêm dữ liệu về tốc độ thực tế trước khi kết luận nguyên nhân."
     )
 
     st.info(

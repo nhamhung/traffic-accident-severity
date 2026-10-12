@@ -64,7 +64,7 @@ def render() -> None:
     st.subheader("Sau bài trình bày, chúng ta sẽ hiểu gì?")
     st.markdown(
         "- Cách thử dự đoán một tình huống tai nạn và kiểm tra mô hình đúng hay sai.\n"
-        "- Ba phát hiện dễ thấy nhất về **chiếu sáng, thời điểm và nhóm tuổi người lái**.\n"
+        "- Bốn phát hiện dễ thấy nhất về **chiếu sáng, thời điểm, nhóm tuổi người lái và tốc độ**.\n"
         "- Cách biến một kết quả dữ liệu thành ý tưởng quản lý, đồng thời hiểu giới hạn của nó."
     )
     shared.source_note()
