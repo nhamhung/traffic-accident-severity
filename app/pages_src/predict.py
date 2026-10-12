@@ -41,18 +41,37 @@ def _set_from_row(row: pd.Series | dict) -> None:
     st.session_state["hour_pick"] = int(hour.hour) if not pd.isna(hour) else 12
 
 
-def _load_random_accident() -> None:
-    row = shared.get_accidents_df().sample(1).iloc[0]
+def _store_loaded_accident(row: pd.Series) -> None:
     _set_from_row(row)
     st.session_state["loaded"] = {c: st.session_state.get(_key(c)) for c in config.RAW_FEATURE_COLS
                                   if c != config.TIME_COL} | {"hour": st.session_state["hour_pick"]}
     st.session_state["loaded_severity"] = row[config.TARGET_COL]
+    st.session_state.pop("load_error", None)
+
+
+def _load_random_non_severe_accident() -> None:
+    accidents = shared.get_accidents_df()
+    non_severe_accidents = accidents[~accidents[config.TARGET_COL].isin(config.SEVERE_CLASSES)]
+    if non_severe_accidents.empty:
+        st.session_state["load_error"] = "Không tìm thấy vụ tai nạn không nghiêm trọng trong dữ liệu."
+        return
+    _store_loaded_accident(non_severe_accidents.sample(1).iloc[0])
+
+
+def _load_random_severe_accident() -> None:
+    accidents = shared.get_accidents_df()
+    severe_accidents = accidents[accidents[config.TARGET_COL].isin(config.SEVERE_CLASSES)]
+    if severe_accidents.empty:
+        st.session_state["load_error"] = "Không tìm thấy vụ tai nạn nghiêm trọng trong dữ liệu."
+        return
+    _store_loaded_accident(severe_accidents.sample(1).iloc[0])
 
 
 def _reset() -> None:
     _set_from_row(shared.get_default_row())
     st.session_state.pop("loaded", None)
     st.session_state.pop("loaded_severity", None)
+    st.session_state.pop("load_error", None)
 
 
 def _current_row() -> dict:
@@ -135,8 +154,10 @@ def render() -> None:
         _reset()
 
     b1, b2 = st.columns(2)
-    b1.button("🎲 Lấy một vụ tai nạn có thật", on_click=_load_random_accident, width="stretch")
-    b2.button("↺ Về vụ tai nạn \"điển hình\"", on_click=_reset, width="stretch")
+    b1.button("✅ Lấy một vụ tai nạn không nghiêm trọng", on_click=_load_random_non_severe_accident, width="stretch")
+    b2.button("⚠️ Lấy một vụ tai nạn nghiêm trọng", on_click=_load_random_severe_accident, width="stretch")
+    if st.session_state.get("load_error"):
+        st.warning(st.session_state["load_error"])
 
     st.subheader("Những yếu tố quan trọng nhất")
     c1, c2, c3 = st.columns(3)
