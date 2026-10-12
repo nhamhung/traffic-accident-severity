@@ -1,0 +1,6 @@
+:root {
+  --theme-primary: #b91c1c; --theme-primary-rgb: 185, 28, 28;
+  --theme-secondary: #0f766e; --theme-accent: #d97706; --theme-accent-rgb: 217, 119, 6;
+  --theme-bg: #fff7ed; --theme-ink: #451a03;
+  --theme-banner: linear-gradient(115deg, #7f1d1d 0%, #b91c1c 58%, #d97706 130%);
+}

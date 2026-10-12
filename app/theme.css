@@ -1,0 +1,5 @@
+:root {
+  --theme-primary: #b91c1c; --theme-primary-rgb: 185, 28, 28;
+  --theme-secondary: #0f766e; --theme-accent: #d97706; --theme-accent-rgb: 217, 119, 6;
+  --theme-bg: #fff7ed; --theme-sidebar: #feedd8; --theme-ink: #451a03;
+}
