@@ -101,7 +101,7 @@ def rate_bars(col, order=None, title=None, horizontal=True, min_n=30):
 
 ::: {.callout-tip}
 ## Ứng dụng tương tác
-[Mở ứng dụng Streamlit](https://traffic-accident-severity.streamlit.app){target="_blank"} để tự chọn hoàn cảnh
+[Mở ứng dụng Streamlit](https://traffic-accident-severity-cvz7oug8kg8mbftwnn8e6r.streamlit.app/){target="_blank"} để tự chọn hoàn cảnh
 của một vụ tai nạn và xem mô hình dự đoán.
 :::
 
