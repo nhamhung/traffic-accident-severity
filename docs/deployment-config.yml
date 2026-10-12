@@ -2,7 +2,7 @@ repository_owner: nhamhung
 repository_name: traffic-accident-severity
 default_branch: main
 pages_url: https://nhamhung.github.io/traffic-accident-severity/
-streamlit_url: https://traffic-accident-severity.streamlit.app
+streamlit_url: https://traffic-accident-severity-cvz7oug8kg8mbftwnn8e6r.streamlit.app/
 streamlit_entrypoint: app/streamlit_app.py
 streamlit_secrets:
   - KAGGLE_API_TOKEN
