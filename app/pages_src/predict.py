@@ -132,10 +132,10 @@ def _explanation_chart(contrib: pd.Series, row: dict):
 
 
 def render() -> None:
-    st.title("🎯 Thử dự đoán một tình huống tai nạn")
+    st.title("🎯 Cùng thử dự đoán một tình huống tai nạn")
     st.markdown(
-        "Hãy chọn **hoàn cảnh** của một vụ tai nạn — ánh sáng, kiểu va chạm, số xe và người lái. "
-        "Công cụ sẽ ước tính **nguy cơ vụ đó nghiêm trọng** và chỉ ra những yếu tố đáng chú ý nhất."
+        "Ở phần này, cả lớp có thể thay đổi hoàn cảnh của một vụ tai nạn và xem dự đoán thay đổi ra sao. "
+        "Hãy coi đây như một thí nghiệm nhỏ: **đổi một yếu tố, rồi quan sát điều gì xảy ra**."
     )
     st.caption("Công cụ chỉ xem xét thông tin có thể quan sát trước hoặc ngay tại thời điểm va chạm.")
 
@@ -147,13 +147,19 @@ def render() -> None:
     if _key("Light_conditions") not in st.session_state:
         _reset()
 
+    st.subheader("1. Chọn một ví dụ có thật")
+    st.markdown(
+        "Hai nút dưới đây lấy ngẫu nhiên một hồ sơ trong dữ liệu. Chúng ta có thể bắt đầu từ một vụ nhẹ và một vụ "
+        "nghiêm trọng để so sánh xem mô hình phản ứng khác nhau như thế nào."
+    )
     b1, b2 = st.columns(2)
     b1.button("✅ Lấy một vụ tai nạn không nghiêm trọng", on_click=_load_random_non_severe_accident, width="stretch")
     b2.button("⚠️ Lấy một vụ tai nạn nghiêm trọng", on_click=_load_random_severe_accident, width="stretch")
     if st.session_state.get("load_error"):
         st.warning(st.session_state["load_error"])
 
-    st.subheader("Những yếu tố quan trọng nhất")
+    st.subheader("2. Thử thay đổi hoàn cảnh")
+    st.markdown("Ví dụ: giữ nguyên mọi thứ nhưng đổi từ *ban ngày* sang *trời tối không có đèn đường*.")
     c1, c2, c3 = st.columns(3)
     with c1:
         _select("Light_conditions")
@@ -182,6 +188,7 @@ def render() -> None:
     severe = p >= threshold
 
     st.divider()
+    st.subheader("3. Đọc câu trả lời của công cụ")
     left, right = st.columns([1, 1.3])
     with left:
         st.metric("Khả năng vụ tai nạn nghiêm trọng", shared.pct(p))
@@ -192,14 +199,14 @@ def render() -> None:
         if st.session_state.get("loaded") and _unchanged_since_load(row):
             actual = st.session_state["loaded_severity"]
             actual_severe = actual in config.SEVERE_CLASSES
-            verdict = "✅ Mô hình đoán đúng." if actual_severe == severe else "❌ Lần này mô hình đoán sai."
+            verdict = "✅ Lần này mô hình đoán đúng." if actual_severe == severe else "❌ Lần này mô hình đoán sai."
             st.info(f"Đây là một vụ tai nạn có thật. Thực tế: **{vi.cls(actual)}**. {verdict}")
         elif st.session_state.get("loaded"):
             st.caption("Bạn đã thay đổi vụ tai nạn có thật, nên không còn so sánh với kết quả thực tế.")
-        st.caption(f"Mức cảnh báo của công cụ: {shared.pct(threshold)}. Đây là tín hiệu để xem xét kỹ hơn, "
-                   "không phải kết luận chắc chắn.")
+        st.caption(f"Hãy hình dung {shared.pct(threshold)} là một vạch cảnh báo: vượt qua vạch không có nghĩa tai nạn "
+                   "chắc chắn nghiêm trọng, mà chỉ có nghĩa tình huống đáng được chú ý hơn.")
     with right:
-        st.markdown("**Vì sao mô hình nghĩ như vậy?**")
+        st.markdown("**Yếu tố nào làm dự đoán thay đổi?**")
         contrib = severity_model.explain(X).iloc[0]
         fig = _explanation_chart(contrib, row)
         st.pyplot(fig, width="stretch")
@@ -212,5 +219,6 @@ def render() -> None:
         "khoảng **30 trên 100 vụ** sẽ có người bị thương nặng hoặc tử vong. Nó **không** nói chắc chắn "
         "vụ này sẽ ra sao."
     ))
-    st.caption("Đây là công cụ học tập. Kết quả có thể đúng hoặc sai và không được dùng để tự động ra quyết định thật.")
+    st.caption("Mô hình học từ các ví dụ trong quá khứ nên vẫn có thể đoán sai. Đây là công cụ học tập, không phải "
+               "một hệ thống tự động ra quyết định.")
     shared.source_note()
