@@ -50,18 +50,22 @@ def _rate_chart(rates: pd.DataFrame, column: str, base_rate: float, order: list 
 def render() -> None:
     st.title("🔎 Những phát hiện thú vị")
     st.markdown(
-        "Ba kết quả dưới đây nổi bật vì **dễ hiểu, có thể quan sát ngoài thực tế và gợi ý được hành động quản lý**. "
-        "Thanh đỏ cho thấy nhóm có tỉ lệ tai nạn nghiêm trọng cao hơn rõ rệt."
+        "Sau khi so sánh các nhóm tai nạn, em chọn ra ba kết quả dễ giải thích nhất cho lớp. "
+        "Chúng không chỉ là con số: mỗi kết quả đều gợi ra một câu hỏi thực tế mà người quản lý có thể kiểm tra."
+    )
+    st.info(
+        "**Cách đọc biểu đồ:** nếu một nhóm có tỉ lệ 20%, có thể hiểu đơn giản rằng cứ 100 vụ có hoàn cảnh tương tự "
+        "thì khoảng 20 vụ là nghiêm trọng. Đường gạch đứt là mức trung bình để chúng ta dễ so sánh."
     )
     facts = shared.get_json("data_facts.json")
     rates = shared.get_result("rates_by.csv")
     base_rate = facts["severe_share"]
 
-    st.subheader("1. Thiếu đèn đường là tín hiệu nguy hiểm rõ nhất")
+    st.subheader("1. Điều làm em chú ý nhất: đường tối nhưng không có đèn")
     st.plotly_chart(_rate_chart(rates, "Light_conditions", base_rate), width="stretch")
     st.markdown(
-        "Tai nạn trong bóng tối **không có đèn đường** nghiêm trọng hơn rõ rệt. Trong khi đó, ban đêm có chiếu sáng "
-        "tốt gần với ban ngày hơn. Điều này gợi ý một hướng hành động rất cụ thể: khảo sát và ưu tiên các đoạn đường tối."
+        "Nhóm *trời tối, không có đèn đường* nằm cao hơn rõ rệt. Điều thú vị là ban đêm **có đèn** lại gần với ban ngày "
+        "hơn. Cách hiểu đơn giản: vấn đề đáng kiểm tra có thể không phải chỉ là trời tối, mà là **khả năng quan sát**."
     )
 
     st.subheader("2. Ban đêm và rạng sáng cần được chú ý hơn")
@@ -80,11 +84,11 @@ def render() -> None:
     figure.update_layout(yaxis_tickformat=".0%", height=320, margin=dict(t=10))
     st.plotly_chart(figure, width="stretch")
     st.markdown(
-        "Kết quả theo giờ củng cố phát hiện về ánh sáng. Đây là cơ sở để cân nhắc thời điểm tuần tra, cảnh báo và "
-        "bố trí lực lượng phản ứng."
+        "Đường biểu diễn tăng lên ở một số giờ ban đêm và rạng sáng. Kết quả này kể cùng một câu chuyện với biểu đồ "
+        "ánh sáng ở trên: thời điểm và tầm nhìn có thể kết hợp với nhau làm rủi ro thay đổi."
     )
 
-    st.subheader("3. Nhóm tuổi ở hai đầu có nguy cơ cao hơn")
+    st.subheader("3. Các nhóm tuổi không có mức rủi ro giống nhau")
     st.plotly_chart(
         _rate_chart(
             rates,
@@ -96,12 +100,12 @@ def render() -> None:
         width="stretch",
     )
     st.markdown(
-        "Người lái rất trẻ và người lái lớn tuổi có tỉ lệ tai nạn nghiêm trọng cao hơn nhóm ở giữa. Phát hiện này "
-        "gợi ý các chương trình giáo dục, hỗ trợ và thiết kế an toàn phù hợp cho từng nhóm."
+        "Trong dữ liệu này, nhóm rất trẻ và nhóm lớn tuổi có tỉ lệ nghiêm trọng cao hơn các nhóm ở giữa. Biểu đồ chưa "
+        "cho biết *vì sao*, nhưng giúp chúng ta đặt câu hỏi tiếp theo về kinh nghiệm lái xe, khả năng phản ứng và hình thức hỗ trợ phù hợp."
     )
 
     st.info(
-        "Các biểu đồ cho thấy **mối liên hệ**, không khẳng định một yếu tố duy nhất là nguyên nhân. "
-        "Chúng nên được dùng để chọn nơi cần khảo sát kỹ hơn."
+        "Một điểm rất quan trọng khi trình bày: **đi cùng nhau không có nghĩa là gây ra nhau**. Ví dụ, đường tối có thể "
+        "đồng thời là đường vắng, xe chạy nhanh hoặc xa nơi cấp cứu. Các biểu đồ giúp đặt giả thuyết, chưa chứng minh nguyên nhân."
     )
     shared.source_note()

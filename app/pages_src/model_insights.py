@@ -8,52 +8,63 @@ from . import shared
 def render() -> None:
     st.title("🚦 Ứng dụng tiềm năng vào quản lý giao thông")
     st.markdown(
-        "Dự án không nhằm tự động ra quyết định. Giá trị thực tế nằm ở việc giúp cơ quan quản lý "
-        "**nhìn thấy tín hiệu rủi ro sớm hơn và ưu tiên nguồn lực hợp lý hơn**."
+        "Đến đây, câu hỏi của em không còn là “mô hình dự đoán được bao nhiêu phần trăm?”, mà là: "
+        "**nếu thấy một tín hiệu rủi ro, chúng ta có thể làm gì với nó?**"
     )
 
-    st.subheader("1. Ba hướng hành động từ những phát hiện chính")
+    st.subheader("1. Từ ba phát hiện đến ba ý tưởng hành động")
     columns = st.columns(3)
     columns[0].markdown(
         "### 💡 Chiếu sáng\n"
-        "Lập bản đồ các đoạn đường tối, kiểm tra hệ thống đèn và ưu tiên điểm có nhiều tình huống nguy cơ cao."
+        "Khảo sát các đoạn đường tối, kiểm tra đèn và khả năng quan sát trước khi quyết định nơi cần ưu tiên."
     )
     columns[1].markdown(
         "### 🌙 Thời điểm\n"
-        "Tăng cảnh báo, tuần tra hoặc khả năng phản ứng vào những khung giờ ban đêm và rạng sáng."
+        "Cân nhắc cảnh báo, tuần tra và khả năng phản ứng vào những khung giờ cần chú ý hơn."
     )
     columns[2].markdown(
         "### 👥 Nhóm người lái\n"
-        "Thiết kế truyền thông và hỗ trợ phù hợp hơn cho người lái rất trẻ và người lái lớn tuổi."
+        "Tìm hiểu nhu cầu khác nhau của người lái trẻ và lớn tuổi để thiết kế hướng dẫn phù hợp hơn."
     )
 
-    st.subheader("2. Một quy trình hỗ trợ quyết định")
+    st.subheader("2. Hãy tưởng tượng một tình huống gần gũi")
     st.markdown(
-        "1. **Ghi nhận hoàn cảnh:** ánh sáng, thời điểm, đường sá, phương tiện và kiểu va chạm.\n"
-        "2. **Sàng lọc nguy cơ:** dùng công cụ dự đoán để nhận diện trường hợp đáng chú ý.\n"
-        "3. **Kiểm tra thực địa:** cảnh sát và kỹ sư giao thông xác minh nguyên nhân có thể can thiệp.\n"
-        "4. **Chọn biện pháp:** cải thiện chiếu sáng, tổ chức giao lộ, biển báo, tốc độ hoặc truyền thông.\n"
-        "5. **Đo lại kết quả:** so sánh trước và sau để biết biện pháp có thực sự hiệu quả hay không."
+        "Giả sử quanh trường có một đoạn đường tối, nhiều xe đi qua vào buổi tối và công cụ liên tục đánh dấu các "
+        "tình huống ở đó là đáng chú ý. Kết quả này **không đủ để kết luận** đoạn đường nguy hiểm vì thiếu đèn. "
+        "Nhưng nó là lý do hợp lý để nhà trường hoặc địa phương kiểm tra ánh sáng, tốc độ xe, vạch qua đường và tầm nhìn."
     )
 
-    st.subheader("3. Ví dụ: từ cảnh báo đến hành động")
+    st.subheader("3. Quy trình hợp lý sẽ gồm năm bước")
     st.markdown(
-        "Nếu nhiều tình huống nguy cơ cao cùng xuất hiện tại các đoạn đường tối vào ban đêm, cơ quan quản lý có thể:\n\n"
-        "- xác định các vị trí cần khảo sát trước;\n"
-        "- kiểm tra độ sáng, tốc độ xe và khả năng quan sát;\n"
-        "- thử cải thiện một số vị trí ưu tiên;\n"
-        "- theo dõi xem số vụ nghiêm trọng có giảm sau can thiệp hay không."
+        "1. **Ghi nhận:** thu thập hoàn cảnh tai nạn theo cùng một cách.\n"
+        "2. **Sàng lọc:** dùng công cụ để tìm tình huống cần chú ý.\n"
+        "3. **Kiểm tra:** đến hiện trường và hỏi người có chuyên môn.\n"
+        "4. **Thử giải pháp nhỏ:** ví dụ cải thiện chiếu sáng hoặc biển báo tại một vài điểm.\n"
+        "5. **So sánh trước–sau:** chỉ mở rộng nếu giải pháp thực sự mang lại kết quả tốt."
     )
 
-    st.subheader("4. Điều kiện để áp dụng tại Việt Nam")
-    st.markdown(
-        "- Kiểm chứng lại bằng dữ liệu giao thông tại địa phương.\n"
-        "- Thử nghiệm ở quy mô nhỏ trước khi mở rộng.\n"
-        "- Luôn có chuyên gia xem xét kết quả và chịu trách nhiệm quyết định.\n"
-        "- Bảo vệ thông tin cá nhân và theo dõi tác động ngoài mong muốn."
+    st.subheader("4. Công cụ làm được gì — và không làm được gì?")
+    can_do, cannot_do = st.columns(2)
+    can_do.markdown(
+        "### ✅ Có thể hỗ trợ\n"
+        "- So sánh nhiều tình huống theo cùng một cách.\n"
+        "- Gợi ý nơi hoặc thời điểm cần khảo sát trước.\n"
+        "- Giúp giải thích vì sao một cảnh báo xuất hiện."
     )
-    st.warning(
-        "Đây là dự án giáo dục. Kết quả minh họa một cách tư duy và xây dựng công cụ hỗ trợ; "
-        "chưa đủ để đưa ra quyết định quản lý thực tế tại Việt Nam."
+    cannot_do.markdown(
+        "### ❌ Không thể thay thế\n"
+        "- Dữ liệu giao thông thực tế tại Việt Nam.\n"
+        "- Kiểm tra hiện trường và kiến thức chuyên gia.\n"
+        "- Trách nhiệm ra quyết định của con người."
+    )
+
+    st.subheader("5. Nếu tiếp tục dự án tại Việt Nam")
+    st.markdown(
+        "Bước tiếp theo hợp lý nhất là xin một bộ dữ liệu địa phương, huấn luyện lại mô hình, rồi thử nghiệm ở quy mô "
+        "nhỏ. Em cũng cần trao đổi với chuyên gia giao thông để kiểm tra xem các phát hiện có hợp lý trong bối cảnh Việt Nam hay không."
+    )
+    st.success(
+        "**Điều em rút ra từ dự án:** khoa học dữ liệu hữu ích nhất khi nó giúp con người đặt câu hỏi tốt hơn, "
+        "chứ không phải khi nó cố thay con người đưa ra câu trả lời cuối cùng."
     )
     shared.source_note()
