@@ -118,46 +118,51 @@ def render() -> None:
         "cho biết *vì sao*, nhưng giúp chúng ta đặt câu hỏi tiếp theo về kinh nghiệm lái xe, khả năng phản ứng và hình thức hỗ trợ phù hợp."
     )
 
-    st.subheader("4. Những nguyên nhân liên quan đến tốc độ cần được chú ý")
-    causes = rates[rates["column"] == "Cause_of_accident"].copy()
-    speed_causes = causes["value"].isin(["Overspeed", "Driving at high speed"])
+    st.subheader("4. Tai nạn chỉ có một phương tiện lại nghiêm trọng hơn")
+    vehicles = rates[rates["column"] == "Number_of_vehicles_involved"].copy()
+    vehicles["vehicle_count"] = vehicles["value"].astype(float).astype(int)
+    one_vehicle = vehicles["vehicle_count"] == 1
 
-    def cause_rate(mask: pd.Series) -> float:
-        selected = causes[mask]
+    def vehicle_rate(mask: pd.Series) -> float:
+        selected = vehicles[mask]
         return float((selected["n"] * selected["severe_rate"]).sum() / selected["n"].sum())
 
-    cause_comparison = pd.DataFrame(
+    one_vehicle_rate = vehicle_rate(one_vehicle)
+    multiple_vehicle_rate = vehicle_rate(~one_vehicle)
+    vehicle_comparison = pd.DataFrame(
         {
-            "Nhóm nguyên nhân": ["Liên quan đến tốc độ", "Các nguyên nhân khác"],
-            "Tỉ lệ nghiêm trọng": [cause_rate(speed_causes), cause_rate(~speed_causes)],
+            "Số phương tiện": ["Một phương tiện", "Từ hai phương tiện trở lên"],
+            "Tỉ lệ nghiêm trọng": [one_vehicle_rate, multiple_vehicle_rate],
         }
     )
-    cause_figure = px.bar(
-        cause_comparison,
-        x="Nhóm nguyên nhân",
+    vehicle_figure = px.bar(
+        vehicle_comparison,
+        x="Số phương tiện",
         y="Tỉ lệ nghiêm trọng",
-        text=[shared.pct(value) for value in cause_comparison["Tỉ lệ nghiêm trọng"]],
-        color="Nhóm nguyên nhân",
+        text=[shared.pct(value) for value in vehicle_comparison["Tỉ lệ nghiêm trọng"]],
+        color="Số phương tiện",
         color_discrete_map={
-            "Liên quan đến tốc độ": shared.SEVERE_COLOUR,
-            "Các nguyên nhân khác": shared.SAFE_COLOUR,
+            "Một phương tiện": shared.SEVERE_COLOUR,
+            "Từ hai phương tiện trở lên": shared.SAFE_COLOUR,
         },
     )
-    cause_figure.add_hline(
+    vehicle_figure.add_hline(
         base_rate, line_dash="dash", line_color="gray", annotation_text=f"Mức trung bình {shared.pct(base_rate)}"
     )
-    cause_figure.update_layout(
+    vehicle_figure.update_layout(
         showlegend=False,
         yaxis_tickformat=".0%",
         height=320,
         margin=dict(t=20, b=10),
         xaxis_title=None,
     )
-    st.plotly_chart(cause_figure, width="stretch")
+    st.plotly_chart(vehicle_figure, width="stretch")
     st.markdown(
-        "Khi gộp các mô tả có liên quan trực tiếp đến tốc độ, nhóm này có tỉ lệ tai nạn nghiêm trọng cao hơn "
-        "các nguyên nhân còn lại. Đây là một gợi ý dễ hiểu cho việc kiểm soát tốc độ tại những nơi và thời điểm rủi ro, "
-        "nhưng vẫn cần thêm dữ liệu về tốc độ thực tế trước khi kết luận nguyên nhân."
+        f"Trong dữ liệu này, tai nạn chỉ ghi nhận **một phương tiện** có tỉ lệ nghiêm trọng khoảng "
+        f"**{shared.pct(one_vehicle_rate)}**, cao hơn **{shared.num(one_vehicle_rate / multiple_vehicle_rate, 1)} lần** "
+        f"nhóm có từ hai phương tiện trở lên, khoảng **{shared.pct(multiple_vehicle_rate)}**. "
+        "Đây có thể là các tình huống như mất lái, lật xe hoặc "
+        "va vào vật thể bên đường. Dữ liệu gợi ý nên quan tâm cả tai nạn đơn lẻ, nhưng chưa đủ để kết luận vì sao chúng nghiêm trọng hơn."
     )
 
     st.info(
