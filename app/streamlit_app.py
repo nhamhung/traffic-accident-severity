@@ -10,16 +10,16 @@ Or via Docker (from the project root):
 
 import streamlit as st
 
-from pages_src import feature_engineering, model_insights, overview, predict
+from pages_src import model_insights, overview, predict, rationale
 from theme import apply_theme
 
 st.set_page_config(page_title="Dự đoán mức độ tai nạn giao thông", page_icon="🚦", layout="wide")
 apply_theme()
 
 pages = [
-    st.Page(predict.render, title="Dự đoán", icon="🎯", url_path="predict", default=True),
-    st.Page(overview.render, title="Dữ liệu nói gì?", icon="📊", url_path="overview"),
-    st.Page(feature_engineering.render, title="Chuẩn bị dữ liệu", icon="🔧", url_path="feature-engineering"),
+    st.Page(rationale.render, title="Vì sao có dự án này?", icon="💡", url_path="rationale", default=True),
+    st.Page(predict.render, title="Thử dự đoán", icon="🎯", url_path="predict"),
+    st.Page(overview.render, title="Phát hiện thú vị", icon="🔎", url_path="overview"),
     st.Page(model_insights.render, title="Ứng dụng vào quản lý", icon="🚦", url_path="model-insights"),
 ]
 

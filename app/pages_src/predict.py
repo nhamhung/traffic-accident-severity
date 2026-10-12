@@ -132,24 +132,18 @@ def _explanation_chart(contrib: pd.Series, row: dict):
 
 
 def render() -> None:
-    st.title("🎯 Dự đoán mức độ nghiêm trọng của tai nạn")
+    st.title("🎯 Thử dự đoán một tình huống tai nạn")
     st.markdown(
-        "Hãy chọn **hoàn cảnh** của một vụ tai nạn: trời sáng hay tối, đâm vào gì, người lái bao nhiêu tuổi… "
-        "Mô hình sẽ cho biết **khả năng vụ đó nghiêm trọng** (có người bị thương nặng hoặc tử vong) "
-        "và **vì sao** nó nghĩ như vậy."
+        "Hãy chọn **hoàn cảnh** của một vụ tai nạn — ánh sáng, kiểu va chạm, số xe và người lái. "
+        "Công cụ sẽ ước tính **nguy cơ vụ đó nghiêm trọng** và chỉ ra những yếu tố đáng chú ý nhất."
     )
-    st.caption("Mô hình chỉ dùng thông tin có trước hoặc ngay lúc va chạm, không bao giờ dùng kết quả "
-               "sau tai nạn (ai bị thương, bị thương thế nào).")
+    st.caption("Công cụ chỉ xem xét thông tin có thể quan sát trước hoặc ngay tại thời điểm va chạm.")
 
     try:
         severity_model = shared.get_model()
     except FileNotFoundError as exc:
         st.error(str(exc))
         st.stop()
-    facts = shared.get_json("data_facts.json")
-    summary = shared.get_json("summary.json")
-    base_rate = facts["severe_share"]
-
     if _key("Light_conditions") not in st.session_state:
         _reset()
 
@@ -190,15 +184,11 @@ def render() -> None:
     st.divider()
     left, right = st.columns([1, 1.3])
     with left:
-        st.metric("Khả năng vụ tai nạn nghiêm trọng", shared.pct(p),
-                  f"{p / base_rate:.1f} lần mức trung bình ({shared.pct(base_rate)})".replace(".", ","),
-                  delta_color="off")
+        st.metric("Khả năng vụ tai nạn nghiêm trọng", shared.pct(p))
         if severe:
-            st.error(f"⚠️ **Mô hình cảnh báo: có nguy cơ NGHIÊM TRỌNG.** Mô hình bật cảnh báo khi khả năng "
-                     f"từ {shared.pct(threshold)} trở lên.")
+            st.error("⚠️ **Cảnh báo: tình huống này có nguy cơ NGHIÊM TRỌNG.**")
         else:
-            st.success(f"✅ **Mô hình đánh giá: có lẽ KHÔNG nghiêm trọng.** (Dưới mức cảnh báo "
-                       f"{shared.pct(threshold)}.)")
+            st.success("✅ **Tình huống này có nguy cơ thấp hơn mức cảnh báo.**")
         if st.session_state.get("loaded") and _unchanged_since_load(row):
             actual = st.session_state["loaded_severity"]
             actual_severe = actual in config.SEVERE_CLASSES
@@ -206,13 +196,8 @@ def render() -> None:
             st.info(f"Đây là một vụ tai nạn có thật. Thực tế: **{vi.cls(actual)}**. {verdict}")
         elif st.session_state.get("loaded"):
             st.caption("Bạn đã thay đổi vụ tai nạn có thật, nên không còn so sánh với kết quả thực tế.")
-        with st.popover("Tại sao lại là " + shared.pct(threshold) + "?"):
-            st.markdown(
-                f"Chỉ khoảng **{shared.pct(base_rate)}** số vụ tai nạn là nghiêm trọng, nên hiếm khi mô hình "
-                f"chắc chắn trên 50%. Nếu chờ đến 50% mới cảnh báo, nó sẽ bỏ sót gần hết các vụ nghiêm trọng. "
-                f"Mức {shared.pct(threshold)} được chọn để cân bằng giữa **bắt được nhiều vụ nghiêm trọng** "
-                f"và **không báo động nhầm quá nhiều**. Xem trang *Ứng dụng vào quản lý* để hiểu thêm."
-            )
+        st.caption(f"Mức cảnh báo của công cụ: {shared.pct(threshold)}. Đây là tín hiệu để xem xét kỹ hơn, "
+                   "không phải kết luận chắc chắn.")
     with right:
         st.markdown("**Vì sao mô hình nghĩ như vậy?**")
         contrib = severity_model.explain(X).iloc[0]
@@ -227,8 +212,5 @@ def render() -> None:
         "khoảng **30 trên 100 vụ** sẽ có người bị thương nặng hoặc tử vong. Nó **không** nói chắc chắn "
         "vụ này sẽ ra sao."
     ))
-    st.caption(f"Khi kiểm tra trên những vụ tai nạn nó chưa từng thấy, mô hình phát hiện được khoảng "
-               f"{shared.pct(summary['recall_severe'])} số vụ nghiêm trọng, và khoảng {shared.pct(summary['precision_severe'])} "
-               "số lần cảnh báo là đúng. Nó vẫn bỏ sót và báo nhầm không ít: đây là công cụ học tập, không dùng để "
-               "ra quyết định thật.")
+    st.caption("Đây là công cụ học tập. Kết quả có thể đúng hoặc sai và không được dùng để tự động ra quyết định thật.")
     shared.source_note()

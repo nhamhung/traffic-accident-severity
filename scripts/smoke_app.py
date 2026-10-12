@@ -27,9 +27,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from tests.test_features import make_synthetic_panel  # noqa: E402
 from traffic_accident_severity import config  # noqa: E402
 
-PAGES = ["predict", "overview", "feature_engineering", "model_insights"]
-RESULT_FILES = ["data_facts.json", "rates_by.csv", "leak_check.csv", "model_comparison.csv",
-                "threshold_tradeoff.csv", "feature_importance.csv", "summary.json"]
+PAGES = ["rationale", "predict", "overview", "model_insights"]
+RESULT_FILES = ["data_facts.json", "rates_by.csv", "summary.json"]
 
 
 def check_model() -> None:
